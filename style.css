@@ -429,3 +429,6 @@ hr.sep{border:none; border-top:1px dashed var(--border); margin: 12px 0;}
   .grid{grid-template-columns: 1fr;}
   .brand{min-width:auto}
 }
+
+/* Admin-only UI */
+body[data-admin="0"] .admin-only{display:none !important;}

@@ -56,3 +56,7 @@ Kolekcje/tkaniny/kolory w `seed.js` są wygenerowane z Twojego Excela.
 ## Aktualizacja z listy MP4
 Seed jest zaktualizowany na podstawie eksportu listy plików MP4 (te kolory są oznaczone jako ✓ nagrane).
 W tej wersji zmienił się klucz zapisu w przeglądarce (v17), więc Chrome/Edge nie wciągną starego stanu.
+
+
+## GitHub Pages update tip
+If the page looks empty after updating files, an old Service Worker/cache may be serving stale scripts. Do a hard refresh (Ctrl+F5) or clear site data.

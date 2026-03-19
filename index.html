@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Slow Motion Tracker</title>
+  <title>Slow Motion Fabrics</title>
   <link rel="stylesheet" href="style.css" />
   <meta name="color-scheme" content="light" />
 </head>
-<body>
+<body data-admin="0">
   <div class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <div class="title">Slow Motion Tracker</div>
+        <div class="title">Slow Motion Fabrics</div>
         <div class="subtitle">Lista tkanin → statusy kolorów (✕ / ? / ✓)</div>
       </div>
 
@@ -21,8 +21,8 @@
       </div>
 
       <div class="actions">
-        <button class="btn" id="bulkToggleBtn" title="Masowe zaznaczanie">Masowe</button>
-        <button class="btn" id="undoBtn" title="Cofnij (Ctrl+Z)" disabled>↶ Cofnij</button>
+        <button class="btn admin-only" id="bulkToggleBtn" title="Masowe zaznaczanie">Masowe</button>
+        <button class="btn admin-only" id="undoBtn" title="Cofnij (Ctrl+Z)" disabled>↶ Cofnij</button>
         <button class="btn" id="settingsBtn">Ustawienia</button>
       </div>
     </div>
@@ -63,6 +63,34 @@
       </div>
       <div class="modal-body">
         <div class="modal-section">
+          <h4>Administrator</h4>
+          <div class="small">Edycja jest dostępna tylko dla administratora. Pozostali mają podgląd.</div>
+          <div class="kv">
+            <div class="left">
+              <strong>Status</strong>
+              <span id="adminStatusText">Podgląd (tylko odczyt)</span>
+            </div>
+            <div class="right">
+              <button class="btn" id="adminLoginBtn">Zaloguj</button>
+              <button class="btn" id="adminLogoutBtn" disabled>Wyloguj</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Hasło administratora</label>
+              <input id="adminPasswordInput" type="password" placeholder="••••••" autocomplete="current-password" />
+              <div class="small">Po zalogowaniu pojawią się przyciski edycji (w tym „Masowe”).</div>
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn" id="adminLoginBtn2">Zaloguj administratora</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="modal-section admin-only">
           <h4>Chmura (Firebase)</h4>
           <div class="small">Tu wklejasz konfigurację z Firebase Console (bez edycji plików). Działa na GitHub Pages / Firebase Hosting. Z <b>file://</b> logowanie zwykle nie działa.</div>
 
@@ -88,7 +116,8 @@
               <label>Tryb logowania</label>
               <select id="authModeSelect">
                 <option value="google">Google</option>
-                <option value="anonymous">Anonimowe</option>
+                <option value="google_redirect">Google (przekierowanie)</option>
+              <option value="anonymous">Anonimowe</option>
               </select>
             </div>
           </div>
@@ -107,7 +136,7 @@
 
         <hr class="sep" />
 
-        <div class="modal-section">
+        <div class="modal-section admin-only">
           <h4>Kolejność kolekcji</h4>
           <div id="collectionOrderList"></div>
           <div class="small">To ustawia, co wyświetla się jako pierwsze na stronie głównej.</div>
@@ -115,7 +144,7 @@
 
         <hr class="sep" />
 
-        <div class="modal-section">
+        <div class="modal-section admin-only">
           <h4>Dodaj tkaninę</h4>
           <div class="form-grid">
             <div class="field">
@@ -133,7 +162,7 @@
 
         <hr class="sep" />
 
-        <div class="modal-section">
+        <div class="modal-section admin-only">
           <h4>Backup</h4>
           <div class="kv">
             <div class="left">
@@ -157,7 +186,6 @@
   <div class="toast" id="toast"></div>
 
   <!-- Seed + App -->
-  <script src="seed.js"></script>
 
   <!-- Firebase SDK (loaded only if user configures cloud) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -165,5 +193,16 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 
   <script src="app.js"></script>
+  <script>
+    // If JS failed to load (missing app.js / blocked by SW), show a hint.
+    setTimeout(() => {
+      if (!document.documentElement.dataset.appReady) {
+        const el = document.createElement('div');
+        el.style.cssText = "position:fixed;left:16px;bottom:16px;max-width:520px;padding:12px 14px;background:#fff;border:1px solid #e6d7c8;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08);font:13px/1.35 system-ui;z-index:9999";
+        el.innerHTML = "<b>Uwaga:</b> aplikacja nie uruchomiła się (JS nie działa). Jeśli to GitHub Pages: upewnij się, że <code>index.html</code> i <code>app.js</code> są w tym samym folderze oraz wyczyść cache/Service Worker (Ctrl+F5).";
+        document.body.appendChild(el);
+      }
+    }, 1500);
+  </script>
 </body>
 </html>
