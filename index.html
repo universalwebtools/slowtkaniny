@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Slow Motion Fabrics</title>
+  <link rel="stylesheet" href="style.css" />
+  <meta name="color-scheme" content="light" />
+</head>
+<body data-admin="0">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="title">Slow Motion Fabrics</div>
+        <div class="subtitle">Lista tkanin → statusy kolorów (✕ / ? / ✓)</div>
+      </div>
+
+      <div class="search">
+        <input id="searchInput" type="text" placeholder="Szukaj tkaniny…" autocomplete="off" />
+        <div class="pill" id="cloudPill">Chmura: lokalnie</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn admin-only" id="bulkToggleBtn" title="Masowe zaznaczanie">Masowe</button>
+        <button class="btn admin-only" id="undoBtn" title="Cofnij (Ctrl+Z)" disabled>↶ Cofnij</button>
+        <button class="btn" id="settingsBtn">Ustawienia</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="grid">
+      <div class="card" id="leftCard">
+        <div class="card-head">
+          <h2>Kolekcje i tkaniny</h2>
+          <div class="legend">
+            <span>do nagrania <span class="x">✕</span></span>
+            <span>do poprawy <span class="q">?</span></span>
+            <span>nagrane <span class="v">✓</span></span>
+          </div>
+        </div>
+        <div class="card-body" id="fabricList"></div>
+      </div>
+
+      <div class="card" id="rightCard">
+        <div class="card-head">
+          <h2>Szczegóły</h2>
+          <div class="legend" id="detailLegend"></div>
+        </div>
+        <div class="card-body" id="detailPane">
+          <div class="detail-empty">Wybierz tkaninę po lewej, żeby zobaczyć kolory po prawej.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-head">
+        <h3 id="settingsTitle">Ustawienia</h3>
+        <button class="btn ghost" id="settingsClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-section">
+          <h4>Administrator</h4>
+          <div class="small">Edycja jest dostępna tylko dla administratora. Pozostali mają podgląd.</div>
+          <div class="kv">
+            <div class="left">
+              <strong>Status</strong>
+              <span id="adminStatusText">Podgląd (tylko odczyt)</span>
+            </div>
+            <div class="right">
+              <button class="btn" id="adminLoginBtn">Zaloguj</button>
+              <button class="btn" id="adminLogoutBtn" disabled>Wyloguj</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Hasło administratora</label>
+              <input id="adminPasswordInput" type="password" placeholder="••••••" autocomplete="current-password" />
+              <div class="small">Po zalogowaniu pojawią się przyciski edycji (w tym „Masowe”).</div>
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn" id="adminLoginBtn2">Zaloguj administratora</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="modal-section admin-only">
+          <h4>Chmura (Firebase)</h4>
+          <div class="small">Tu wklejasz konfigurację z Firebase Console (bez edycji plików). Działa na GitHub Pages / Firebase Hosting. Z <b>file://</b> logowanie zwykle nie działa.</div>
+
+          <div class="kv">
+            <div class="left">
+              <strong>Status chmury</strong>
+              <span id="cloudStatusText">Lokalnie (brak konfiguracji)</span>
+            </div>
+            <div class="right">
+              <button class="btn" id="cloudConnectBtn">Połącz</button>
+              <button class="btn" id="cloudLoginBtn" disabled>Zaloguj</button>
+              <button class="btn" id="cloudLogoutBtn" disabled>Wyloguj</button>
+              <button class="btn" id="cloudSyncBtn" disabled>Synchronizuj</button>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label>Workspace ID (wspólna baza)</label>
+              <input id="workspaceInput" placeholder="np. studio" />
+            </div>
+            <div class="field">
+              <label>Tryb logowania</label>
+              <select id="authModeSelect">
+                <option value="google">Google</option>
+                <option value="google_redirect">Google (przekierowanie)</option>
+              <option value="anonymous">Anonimowe</option>
+              </select>
+            </div>
+          </div>
+
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-weight:700;">Konfiguracja Firebase (wklej JSON)</summary>
+            <div class="field" style="margin-top:10px;">
+              <label>firebaseConfig (JSON)</label>
+              <textarea id="firebaseConfigTextarea" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'></textarea>
+              <div class="small">Tip: w Firebase Console → Project settings → Your apps → SDK setup and configuration → Config</div>
+            </div>
+            <button class="btn primary" id="saveFirebaseConfigBtn">Zapisz konfigurację</button>
+            <button class="btn danger" id="clearFirebaseConfigBtn">Usuń konfigurację</button>
+          </details>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="modal-section admin-only">
+          <h4>Kolejność kolekcji</h4>
+          <div id="collectionOrderList"></div>
+          <div class="small">To ustawia, co wyświetla się jako pierwsze na stronie głównej.</div>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="modal-section admin-only">
+          <h4>Dodaj tkaninę</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label>Nazwa tkaniny</label>
+              <input id="newFabricName" placeholder="np. Oro" />
+            </div>
+            <div class="field">
+              <label>Kolekcja</label>
+              <select id="newFabricCollection"></select>
+            </div>
+          </div>
+          <button class="btn primary" id="addFabricBtn">Dodaj tkaninę</button>
+          <div class="small">Po dodaniu wybierz tkaninę i dodaj kolory po prawej.</div>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="modal-section admin-only">
+          <h4>Backup</h4>
+          <div class="kv">
+            <div class="left">
+              <strong>Eksport / Import</strong>
+              <span>JSON (pełna kopia). Przydatne do przenoszenia między przeglądarkami.</span>
+            </div>
+            <div class="right">
+              <button class="btn" id="exportJsonBtn">Eksportuj JSON</button>
+              <label class="btn" for="importJsonInput" style="cursor:pointer;">Importuj JSON</label>
+              <input id="importJsonInput" type="file" accept="application/json" style="display:none;" />
+              <button class="btn danger" id="resetSeedBtn" title="Usuwa lokalne dane i ładuje dane startowe">Reset do startu</button>
+            </div>
+          </div>
+          <div class="small">Uwaga: reset dotyczy tylko tej przeglądarki/urządzenia.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Seed + App -->
+
+  <!-- Firebase SDK (loaded only if user configures cloud) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="app.js"></script>
+</body>
+</html>
