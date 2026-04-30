@@ -1,4 +1,6 @@
 document.documentElement.dataset.appReady = "1";
+window.SMF_BUILD = "FINAL_CLOUD_ADMIN_V3_2026_04_30";
+console.log("Slow Motion Fabrics build:", window.SMF_BUILD);
 // Embedded seed (prevents missing seed.js on GitHub Pages deploys)
 window.SEED_DATA = window.SEED_DATA || {
   "schemaVersion": 1,
@@ -1852,7 +1854,17 @@ window.SEED_DATA = window.SEED_DATA || {
   };
 
   const cloudSave = async () => {
-    if (!isAdmin || !cloud.user || !cloud.db || !cloud.configured) return;
+    if (!cloud.user || !cloud.db || !cloud.configured) {
+      toast('Chmura: brak połączenia');
+      return;
+    }
+    const emailForRules = (cloud.user.email || '').toLowerCase();
+    if (!isAdmin || emailForRules !== ADMIN_EMAIL.toLowerCase()) {
+      setCloudPill('brak uprawnień');
+      setCloudStatusText('Brak zapisu. Aktualne konto: ' + (cloud.user.email || 'anonimowe') + '. Wymagane: ' + ADMIN_EMAIL);
+      toast('Chmura: nie zapisano — zaloguj administratora Firebase');
+      return;
+    }
     try {
       cloud.saving = true;
       cloud.lastLocalRev = (cloud.lastLocalRev || 0) + 1;
@@ -2434,12 +2446,35 @@ window.SEED_DATA = window.SEED_DATA || {
     renderSettings();
   };
 
-  const cloudConnect = () => {
-    // Just focus textarea section
-    toast('Wklej firebaseConfig i kliknij „Zapisz konfigurację”');
-    const el = $('#firebaseConfigTextarea');
-    el.scrollIntoView({behavior:'smooth', block:'center'});
-    el.focus();
+  const cloudConnect = async () => {
+    // Domyślna konfiguracja Firebase jest już wbudowana w plik app.js.
+    // Ten przycisk ma tylko wymusić połączenie i pokazać jasny status, a nie kazać wklejać JSON.
+    try {
+      if (!cloud.configured || !cloud.auth || !cloud.db) initCloudFromStoredCfg();
+      if (cloud.auth && !cloud.auth.currentUser) {
+        await cloud.auth.signInAnonymously();
+      }
+      cloud.user = cloud.auth?.currentUser || cloud.user || null;
+      const email = cloud.user?.email || '';
+      const anon = cloud.user?.isAnonymous ? 'anonimowy' : (email || 'konto');
+      if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        setAdmin(true, email);
+        setCloudPill('admin');
+        setCloudStatusText('Połączono jako administrator: ' + email);
+        toast('Połączono z Firebase jako administrator');
+      } else {
+        setAdmin(false);
+        setCloudPill('podgląd');
+        setCloudStatusText('Połączono jako podgląd / ' + anon + '. Do zapisu wpisz hasło administratora u góry i kliknij „Zaloguj administratora”.');
+        toast('Połączono z Firebase. Do zapisu zaloguj administratora hasłem pako14.');
+      }
+      startCloudListener();
+      refreshCloudButtons();
+    } catch (e) {
+      console.warn(e);
+      toast('Błąd połączenia z Firebase: ' + (e?.code || 'unknown'));
+      setCloudStatusText('Błąd połączenia: ' + (e?.code || 'unknown'));
+    }
   };
 
   const explainAuthError = (e) => {
@@ -2467,7 +2502,8 @@ window.SEED_DATA = window.SEED_DATA || {
   };
 
   const adminLogin = async () => {
-    if (!cloud.configured || !cloud.auth) { toast('Chmura nie jest gotowa'); return; }
+    if (!cloud.configured || !cloud.auth) initCloudFromStoredCfg();
+    if (!cloud.configured || !cloud.auth) { toast('Chmura nie jest gotowa — odśwież stronę'); return; }
     if (location.protocol === 'file:') {
       toast('Tryb administratora działa na GitHub Pages / Firebase Hosting (nie z file://).');
       return;
@@ -2490,6 +2526,7 @@ window.SEED_DATA = window.SEED_DATA || {
       if (code === 'auth/user-not-found') toast('Brak konta admin w Firebase Auth (Email/Password): ' + ADMIN_EMAIL);
       else if (code === 'auth/wrong-password') toast('Błędne hasło');
       else if (code === 'auth/operation-not-allowed') toast('W Firebase Auth włącz Email/Password');
+      else if (code === 'auth/invalid-credential') toast('Firebase: błędne dane albo nie ma użytkownika admin@slowtkaniny.local');
       else if (code === 'auth/too-many-requests') toast('Za dużo prób. Spróbuj później.');
       else toast('Błąd logowania admin: ' + (code || 'unknown'));
     }
