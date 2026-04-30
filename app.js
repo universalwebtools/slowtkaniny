@@ -1572,8 +1572,7 @@ window.SEED_DATA = window.SEED_DATA || {
   const CLOUD_CFG_KEY = 'slow_fabric_tracker_cloud_cfg_v1';
 
   // ---------- Admin (read-only for others) ----------
-  const ADMIN_PASSWORD = "pako14";
-  const ADMIN_SESSION_KEY = "slow_fabric_tracker_admin_session";
+  const ADMIN_EMAIL = "admin@slowtkaniny.local";
   const DEFAULT_FIREBASE_CONFIG = {
     apiKey: "AIzaSyCvuttecM1hRygI5NRkf3_x_jQbXd1hir4",
     authDomain: "slowtkaniny.firebaseapp.com",
@@ -1592,11 +1591,11 @@ window.SEED_DATA = window.SEED_DATA || {
     "move-collection-up","move-collection-down","set-collection-first",
     "add-fabric","import-json","reset-seed"
   ]);
-  const setAdmin = (v, label="") => {
+  const setAdmin = (v, email="") => {
     isAdmin = !!v;
     document.body.dataset.admin = isAdmin ? "1" : "0";
     const s = document.getElementById("adminStatusText");
-    if (s) s.textContent = isAdmin ? ("Administrator" + (label ? ": " + label : "")) : "Podgląd (tylko odczyt)";
+    if (s) s.textContent = isAdmin ? ("Administrator: " + (email||"")) : "Podgląd (tylko odczyt)";
     const lb = document.getElementById("adminLoginBtn");
     const lb2 = document.getElementById("adminLoginBtn2");
     const lo = document.getElementById("adminLogoutBtn");
@@ -1756,19 +1755,21 @@ window.SEED_DATA = window.SEED_DATA || {
             console.warn(e);
             setCloudPill('offline');
             setCloudStatusText('Chmura: włącz Anonymous w Firebase Auth');
+            setAdmin(false);
             refreshCloudButtons();
             return;
           }
         }
 
-        // Administrator jest odblokowywany lokalnym hasłem w aplikacji,
-        // a Firebase służy tylko do synchronizacji danych.
-        const viewerLabel = cloud.user.isAnonymous ? 'anonimowy' : (cloud.user.email || 'konto');
-        setCloudPill(isAdmin ? 'admin' : 'podgląd');
-        setCloudStatusText((isAdmin ? 'Administrator / ' : 'Podgląd / ') + viewerLabel);
+        const email = (cloud.user.email || '');
+        const nowAdmin = !!email && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        setAdmin(nowAdmin, email);
+
+        setCloudPill(nowAdmin ? 'admin' : 'podgląd');
+        setCloudStatusText(nowAdmin ? ('Administrator: ' + email) : ('Podgląd: ' + (cloud.user.isAnonymous ? 'anonimowy' : (email || 'konto'))));
 
         startCloudListener();
-        if (isAdmin) scheduleCloudSave(true);
+        if (nowAdmin) scheduleCloudSave(true);
         refreshCloudButtons();
       });
 
@@ -1864,10 +1865,28 @@ window.SEED_DATA = window.SEED_DATA || {
         data: state
       }, { merge: true });
       cloud.saving = false;
+      setCloudPill('zapisano');
+      setCloudStatusText('Zapisano w chmurze jako: ' + (cloud.user.email || 'anonimowy'));
     } catch (e) {
-      console.warn(e);
+      console.warn('Cloud save error:', e, {
+        code: e?.code,
+        message: e?.message,
+        isAdmin,
+        workspaceId: cloud.workspaceId,
+        userEmail: cloud.user?.email || '',
+        isAnonymous: !!cloud.user?.isAnonymous,
+        uid: cloud.user?.uid || ''
+      });
       cloud.saving = false;
-      toast('Chmura: błąd zapisu');
+      const code = e?.code || 'unknown';
+      if (String(code).includes('permission-denied')) {
+        toast('Chmura: odmowa zapisu — zaloguj admina Firebase, nie anonimowo');
+        setCloudPill('brak uprawnień');
+        setCloudStatusText('Brak zapisu. Aktualne konto: ' + (cloud.user?.email || 'anonimowe') + '. Wymagane: admin@slowtkaniny.local');
+      } else {
+        toast('Chmura: błąd zapisu: ' + code);
+        setCloudStatusText('Błąd zapisu: ' + code);
+      }
     }
   };
 
@@ -2448,35 +2467,44 @@ window.SEED_DATA = window.SEED_DATA || {
   };
 
   const adminLogin = async () => {
-    const pwInput = document.getElementById('adminPasswordInput');
-    const pw = (pwInput?.value || '').trim();
+    if (!cloud.configured || !cloud.auth) { toast('Chmura nie jest gotowa'); return; }
+    if (location.protocol === 'file:') {
+      toast('Tryb administratora działa na GitHub Pages / Firebase Hosting (nie z file://).');
+      return;
+    }
+    const pw = (document.getElementById('adminPasswordInput')?.value || '').trim();
     if (!pw) { toast('Wpisz hasło administratora'); return; }
-    if (pw !== ADMIN_PASSWORD) { toast('Błędne hasło administratora'); return; }
-
-    try { sessionStorage.setItem(ADMIN_SESSION_KEY, '1'); } catch {}
-    if (pwInput) pwInput.value = '';
-    setAdmin(true, 'lokalnie');
-    renderAll();
-
-    // Firebase zostaje w trybie anonimowym/podglądu; admin jest blokadą w UI.
-    // Dzięki temu nie ma już błędu auth/invalid-credential.
     try {
-      if (cloud.configured && cloud.auth && !cloud.user) {
-        await cloud.auth.signInAnonymously();
-      }
+      const cred = await cloud.auth.signInWithEmailAndPassword(ADMIN_EMAIL, pw);
+      // Odświeżamy token, żeby Firestore Rules od razu widziały email administratora.
+      try { await cred.user.getIdToken(true); } catch {}
+      cloud.user = cred.user;
+      setAdmin(true, cred.user.email || ADMIN_EMAIL);
+      startCloudListener();
+      document.getElementById('adminPasswordInput').value = '';
+      toast('Zalogowano administratora + chmura aktywna');
+      scheduleCloudSave(true);
     } catch (e) {
       console.warn(e);
+      const code = e?.code || '';
+      if (code === 'auth/user-not-found') toast('Brak konta admin w Firebase Auth (Email/Password): ' + ADMIN_EMAIL);
+      else if (code === 'auth/wrong-password') toast('Błędne hasło');
+      else if (code === 'auth/operation-not-allowed') toast('W Firebase Auth włącz Email/Password');
+      else if (code === 'auth/too-many-requests') toast('Za dużo prób. Spróbuj później.');
+      else toast('Błąd logowania admin: ' + (code || 'unknown'));
     }
-    startCloudListener();
-    scheduleCloudSave(true);
-    toast('Zalogowano administratora');
   };
 
   const adminLogout = async () => {
-    try { sessionStorage.removeItem(ADMIN_SESSION_KEY); } catch {}
-    setAdmin(false);
-    renderAll();
-    toast('Wylogowano administratora');
+    if (!cloud.auth) return;
+    try {
+      await cloud.auth.signOut();
+      try { await cloud.auth.signInAnonymously(); } catch {}
+      toast('Wylogowano administratora');
+    } catch (e) {
+      console.warn(e);
+      toast('Błąd wylogowania');
+    }
   };
 
   const cloudLogin = async () => {
@@ -2752,7 +2780,6 @@ window.SEED_DATA = window.SEED_DATA || {
   state = loadState();
   state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
   cloud.lastLocalRev = state.rev || 0;
-  try { setAdmin(sessionStorage.getItem(ADMIN_SESSION_KEY) === '1', 'lokalnie'); } catch { setAdmin(false); }
   renderAll();
   $('#undoBtn').disabled = undoStack.length === 0;
 
