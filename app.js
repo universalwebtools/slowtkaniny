@@ -1738,7 +1738,67 @@ window.SEED_DATA = window.SEED_DATA || {
       .order-card .order-text{ margin-top:5px; color:#5f554b; white-space:pre-wrap; }
       .viewer-info-box{ padding:10px 12px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.58); margin:10px 0; color:#5f554b; }
       body[data-admin="0"] .admin-only-inline{ display:none !important; }
-      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } }
+
+      @keyframes adminSlowPulse{
+        0%,100%{ box-shadow:0 0 0 rgba(226,72,29,0), 0 12px 45px rgba(38,31,22,.08); border-color:rgba(201,154,46,.30); background:rgba(255,250,240,.92); }
+        50%{ box-shadow:0 0 0 5px rgba(226,72,29,.14), 0 18px 65px rgba(226,72,29,.30); border-color:rgba(226,72,29,.92); background:rgba(255,237,205,.98); }
+      }
+      @keyframes adminRowPulse{
+        0%,100%{ box-shadow:inset 0 0 0 0 rgba(226,72,29,0); background:rgba(255,255,255,.66); }
+        50%{ box-shadow:inset 0 0 0 2px rgba(226,72,29,.45), 0 0 20px rgba(226,72,29,.22); background:rgba(255,239,211,.96); }
+      }
+      @keyframes adminBadgePulse{
+        0%,100%{ transform:scale(1); filter:saturate(1); }
+        50%{ transform:scale(1.05); filter:saturate(1.6); }
+      }
+      body[data-admin="1"] .fabric-row.has-admin-alert,
+      body[data-admin="1"] .color-row.has-admin-alert{
+        animation:adminRowPulse 2.8s ease-in-out infinite;
+        border-radius:14px;
+      }
+      body[data-admin="1"] .fabric-row.has-admin-alert .mini-badge,
+      body[data-admin="1"] .color-row.has-admin-alert .mini-badge,
+      body[data-admin="1"] .compact-status .has-note,
+      body[data-admin="1"] .compact-status .has-order{
+        animation:adminBadgePulse 2.8s ease-in-out infinite;
+        font-weight:800;
+      }
+      .admin-alerts-panel{ display:none; }
+      body[data-admin="1"] .admin-alerts-panel{
+        display:block;
+        position:fixed;
+        left:20px;
+        top:145px;
+        width:420px;
+        max-height:calc(100vh - 170px);
+        overflow:auto;
+        z-index:90;
+        border:2px solid rgba(201,154,46,.35);
+        border-radius:22px;
+        background:rgba(255,250,240,.96);
+        box-shadow:0 18px 70px rgba(38,31,22,.12);
+        padding:14px;
+        backdrop-filter:blur(8px);
+      }
+      body[data-admin="1"] .admin-alerts-panel.has-items{ animation:adminSlowPulse 3.2s ease-in-out infinite; }
+      .admin-alerts-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px; }
+      .admin-alerts-head h3{ margin:0; font-size:18px; line-height:1.15; }
+      .admin-alerts-head .sub{ margin-top:4px; font-size:12px; color:#7b6f63; }
+      .admin-alerts-counters{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+      .admin-alert-section{ margin-top:12px; }
+      .admin-alert-section-title{ font-size:12px; font-weight:900; letter-spacing:.04em; text-transform:uppercase; color:#7b5b18; margin:0 0 7px; display:flex; align-items:center; gap:6px; }
+      .admin-alert-card{ border:1px solid rgba(38,31,22,.12); border-radius:16px; padding:10px; background:rgba(255,255,255,.78); margin:7px 0; cursor:pointer; }
+      .admin-alert-card.order{ border-left:6px solid #e48a21; }
+      .admin-alert-card.note{ border-left:6px solid #4e83c4; }
+      .admin-alert-card:hover{ transform:translateY(-1px); box-shadow:0 10px 22px rgba(38,31,22,.12); }
+      .admin-alert-title{ display:flex; justify-content:space-between; gap:8px; font-weight:900; }
+      .admin-alert-text{ margin-top:6px; color:#5d5349; white-space:pre-wrap; font-size:13px; line-height:1.35; }
+      .admin-alert-meta{ margin-top:6px; font-size:11px; color:#897b6d; }
+      .admin-alert-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+      .admin-alert-actions .btn{ padding:6px 9px; border-radius:10px; font-size:12px; }
+      .admin-alert-empty{ color:#7b6f63; font-size:13px; padding:10px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.55); }
+      @media (max-width: 1380px){ body[data-admin="1"] .admin-alerts-panel{ position:static; width:auto; max-height:none; margin:10px auto 12px; max-width:900px; } }
+      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } body[data-admin="1"] .admin-alerts-panel{ margin:8px 10px; } }
     `;
     document.head.appendChild(style);
   };
@@ -1786,6 +1846,7 @@ window.SEED_DATA = window.SEED_DATA || {
       bulkMode = false;
       document.body.classList.remove("bulk-on");
     }
+    try { renderAdminAlerts(); } catch {}
   };
 
   const clientId = (() => {
@@ -2391,9 +2452,10 @@ window.SEED_DATA = window.SEED_DATA || {
           const doneCount = f.colorOrder.filter(k => normalizeStatus(f.colors[k]) === 'done').length;
           const nNotes = noteCountForFabric(f.id);
           const nOrders = orderCountForFabric(f.id);
+          const alertClass = (nNotes || nOrders) ? 'has-admin-alert' : '';
 
           return `
-            <div class="fabric-row ${active} ${bulkClass}" data-fabric-id="${f.id}">
+            <div class="fabric-row ${active} ${bulkClass} ${alertClass}" data-fabric-id="${f.id}">
               <div class="fabric-left">
                 <div class="chk"><input type="checkbox" class="bulk-fabric" data-fabric-id="${f.id}" ${checked}></div>
                 <div class="fabric-name">${escapeHtml(f.name)}</div>
@@ -2479,8 +2541,9 @@ window.SEED_DATA = window.SEED_DATA || {
       const checked = selectedColors.has(ck) ? 'checked' : '';
       const noteBtnLabel = noteText ? 'Uwagi ✓' : 'Uwagi';
       const orderBtnLabel = ordersForColor ? `Utwórz zlecenie (${ordersForColor})` : 'Utwórz zlecenie';
+      const alertClass = (noteText || ordersForColor) ? 'has-admin-alert' : '';
       return `
-        <div class="color-row community-row" data-color="${ck}">
+        <div class="color-row community-row ${alertClass}" data-color="${ck}">
           <div class="color-main-line">
             <div class="color-left">
               <div class="chk"><input type="checkbox" class="bulk-color" data-color="${ck}" ${checked}></div>
@@ -2549,6 +2612,100 @@ window.SEED_DATA = window.SEED_DATA || {
     `;
 
     detailPaneEl.innerHTML = header;
+    renderAdminAlerts();
+  };
+
+  function renderAdminAlerts(){
+    let panel = document.getElementById('adminAlertsPanel');
+    if (!isAdmin) {
+      if (panel) panel.remove();
+      return;
+    }
+    if (!panel) {
+      panel = document.createElement('aside');
+      panel.id = 'adminAlertsPanel';
+      panel.className = 'admin-alerts-panel';
+      const container = document.querySelector('.container') || document.body;
+      container.parentNode.insertBefore(panel, container);
+    }
+
+    const activeOrders = (viewerOrders || [])
+      .filter(o => (o.status || 'open') === 'open')
+      .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const notes = Object.entries(viewerNotes || {})
+      .map(([key, n]) => ({ key, ...(n || {}) }))
+      .filter(n => (n.text || '').trim())
+      .sort((a,b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+
+    const shortText = (txt, max=140) => {
+      txt = String(txt || '').trim();
+      return txt.length > max ? txt.slice(0, max-1) + '…' : txt;
+    };
+    const fabricLabel = (fid, fallback='') => state.fabrics?.[fid]?.name || fallback || 'Tkanina';
+    const any = activeOrders.length + notes.length;
+    panel.classList.toggle('has-items', any > 0);
+
+    const ordersHtml = activeOrders.length ? activeOrders.map(o => `
+      <div class="admin-alert-card order" data-action="focus-community-item" data-fabric-id="${escapeHtml(o.fabricId || '')}" data-color="${escapeHtml(o.color || '')}">
+        <div class="admin-alert-title"><span>🎥 ${escapeHtml(fabricLabel(o.fabricId, o.fabricName))} ${escapeHtml(o.color || '')}</span><span class="mini-badge order">zlecenie</span></div>
+        ${o.message ? `<div class="admin-alert-text">${escapeHtml(shortText(o.message))}</div>` : `<div class="admin-alert-text">Bez dodatkowego opisu.</div>`}
+        <div class="admin-alert-meta">${escapeHtml(o.author || 'bez podpisu')} • ${escapeHtml(formatDateTime(o.createdAt))}</div>
+        <div class="admin-alert-actions">
+          <button class="btn" data-action="focus-community-item" data-fabric-id="${escapeHtml(o.fabricId || '')}" data-color="${escapeHtml(o.color || '')}">Pokaż</button>
+          <button class="btn" data-action="close-order" data-order-id="${escapeHtml(o.id || '')}">Zamknij</button>
+          <button class="btn danger" data-action="delete-order" data-order-id="${escapeHtml(o.id || '')}">Usuń</button>
+        </div>
+      </div>
+    `).join('') : `<div class="admin-alert-empty">Brak aktywnych zleceń.</div>`;
+
+    const notesHtml = notes.length ? notes.map(n => `
+      <div class="admin-alert-card note" data-action="focus-community-item" data-fabric-id="${escapeHtml(n.fabricId || '')}" data-color="${escapeHtml(n.color || '')}">
+        <div class="admin-alert-title"><span>📝 ${escapeHtml(fabricLabel(n.fabricId, n.fabricName))} ${escapeHtml(n.color || '')}</span><span class="mini-badge note">uwaga</span></div>
+        <div class="admin-alert-text">${escapeHtml(shortText(n.text))}</div>
+        <div class="admin-alert-meta">${escapeHtml(formatDateTime(n.updatedAt))}</div>
+        <div class="admin-alert-actions">
+          <button class="btn" data-action="focus-community-item" data-fabric-id="${escapeHtml(n.fabricId || '')}" data-color="${escapeHtml(n.color || '')}">Pokaż</button>
+          <button class="btn" data-action="open-note-direct" data-fabric-id="${escapeHtml(n.fabricId || '')}" data-color="${escapeHtml(n.color || '')}">Edytuj uwagę</button>
+          <button class="btn danger" data-action="delete-note-direct" data-fabric-id="${escapeHtml(n.fabricId || '')}" data-color="${escapeHtml(n.color || '')}">Usuń</button>
+        </div>
+      </div>
+    `).join('') : `<div class="admin-alert-empty">Brak uwag przy kolorach.</div>`;
+
+    panel.innerHTML = `
+      <div class="admin-alerts-head">
+        <div>
+          <h3>🔔 Uwagi i zlecenia</h3>
+          <div class="sub">Widoczne tylko dla administratora. Kliknij pozycję, żeby przejść do tkaniny.</div>
+        </div>
+        <div class="admin-alerts-counters">
+          <span class="mini-badge order">zlecenia: ${activeOrders.length}</span>
+          <span class="mini-badge note">uwagi: ${notes.length}</span>
+        </div>
+      </div>
+      <div class="admin-alert-section">
+        <div class="admin-alert-section-title">🎥 Zlecenia slow motion</div>
+        ${ordersHtml}
+      </div>
+      <div class="admin-alert-section">
+        <div class="admin-alert-section-title">📝 Uwagi / notatki</div>
+        ${notesHtml}
+      </div>
+    `;
+  }
+
+  const focusCommunityItem = (fid, ck, openNote=false) => {
+    const f = state.fabrics?.[fid];
+    if (!f) return;
+    selectedFabricId = fid;
+    state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
+    state.ui.openCollections ||= [];
+    if (f.collectionId && !state.ui.openCollections.includes(f.collectionId)) state.ui.openCollections.push(f.collectionId);
+    renderAll();
+    setTimeout(() => {
+      const row = document.querySelector(`.color-row[data-color="${CSS.escape(String(ck || ''))}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (openNote) openNoteDialog(fid, ck);
+    }, 80);
   };
 
   const renderSettings = () => {
@@ -2653,6 +2810,7 @@ window.SEED_DATA = window.SEED_DATA || {
     renderLeft();
     renderRight();
     renderSettings();
+    renderAdminAlerts();
     saveLocal();
   };
 
@@ -3640,6 +3798,25 @@ window.SEED_DATA = window.SEED_DATA || {
     if (actionEl) {
       const action = actionEl.getAttribute('data-action');
       const fid = selectedFabricId;
+      if (action === 'focus-community-item') {
+        const focusFid = actionEl.getAttribute('data-fabric-id') || fid;
+        const ck = actionEl.getAttribute('data-color') || '';
+        focusCommunityItem(focusFid, ck, false);
+        return;
+      }
+      if (action === 'open-note-direct') {
+        const focusFid = actionEl.getAttribute('data-fabric-id') || fid;
+        const ck = actionEl.getAttribute('data-color') || '';
+        focusCommunityItem(focusFid, ck, true);
+        return;
+      }
+      if (action === 'delete-note-direct') {
+        const focusFid = actionEl.getAttribute('data-fabric-id') || fid;
+        const ck = actionEl.getAttribute('data-color') || '';
+        if (!confirm('Usunąć uwagę?')) return;
+        deleteColorNote(focusFid, ck);
+        return;
+      }
       if (action === 'open-note') {
         const ck = actionEl.getAttribute('data-color');
         openNoteDialog(fid, ck);
