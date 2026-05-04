@@ -1568,6 +1568,136 @@ window.SEED_DATA = window.SEED_DATA || {
     toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
   };
 
+
+  // ---------- Visual enhancements: kolekcje kolorystyczne ----------
+  const injectEnhancementStyles = () => {
+    if (document.getElementById('slowMotionEnhancementStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'slowMotionEnhancementStyles';
+    style.textContent = `
+      .collection.collection-accented{
+        border-left:6px solid var(--col-accent,#d6c6a8) !important;
+        box-shadow:0 10px 24px rgba(38,31,22,.06);
+      }
+      .collection.collection-accented .collection-header{
+        background:linear-gradient(90deg,var(--col-accent-bg,rgba(214,198,168,.16)),rgba(255,255,255,0) 78%);
+        position:relative;
+      }
+      .collection.collection-accented .collection-title .name{
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
+      .collection.collection-accented .collection-title .name::before{
+        content:"";
+        display:inline-block;
+        width:10px;
+        height:10px;
+        border-radius:999px;
+        background:var(--col-accent,#d6c6a8);
+        box-shadow:0 0 0 4px var(--col-accent-bg,rgba(214,198,168,.16));
+        flex:0 0 auto;
+      }
+      .collection.collection-accented .collection-progress .pill,
+      .collection.collection-accented .fabric-badge{
+        border-color:var(--col-accent,#d6c6a8) !important;
+        color:var(--col-accent-ink,#6b5832) !important;
+        background:var(--col-accent-bg,rgba(214,198,168,.13)) !important;
+      }
+      .collection.collection-accented .progress > div{
+        background:linear-gradient(90deg,var(--col-accent,#d6c6a8),rgba(0,0,0,.08)) !important;
+      }
+      .collection-order-item{
+        border-left:5px solid var(--col-accent,#d6c6a8) !important;
+        background:linear-gradient(90deg,var(--col-accent-bg,rgba(214,198,168,.13)),rgba(255,255,255,0) 72%) !important;
+      }
+      .export-section .export-actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        justify-content:flex-end;
+      }
+      .export-section .export-mini-note{
+        margin-top:8px;
+      }
+      .collection-manager-header{
+        display:flex;
+        gap:10px;
+        align-items:end;
+        flex-wrap:wrap;
+        margin:10px 0 12px;
+        padding:12px;
+        border:1px solid rgba(38,31,22,.10);
+        border-radius:16px;
+        background:rgba(255,255,255,.55);
+      }
+      .collection-manager-header .field{
+        min-width:240px;
+        flex:1 1 260px;
+        margin:0;
+      }
+      .collection-order-item.collection-editable{
+        align-items:stretch;
+        gap:12px;
+        padding:12px !important;
+      }
+      .collection-edit-main{
+        flex:1 1 auto;
+        min-width:260px;
+      }
+      .collection-edit-row{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        align-items:center;
+        margin-top:8px;
+      }
+      .collection-name-input{
+        width:min(360px,100%);
+      }
+      .collection-move-select, .collection-delete-target, .move-fabric-select{
+        min-width:180px;
+      }
+      .collection-danger-row{
+        margin-top:8px;
+        padding-top:8px;
+        border-top:1px dashed rgba(38,31,22,.16);
+      }
+      .move-fabric-box{
+        display:flex;
+        gap:8px;
+        align-items:center;
+        flex-wrap:wrap;
+        margin:10px 0;
+        padding:10px 12px;
+        border:1px dashed rgba(38,31,22,.16);
+        border-radius:14px;
+        background:rgba(255,255,255,.55);
+      }
+      @media (max-width: 720px){
+        .export-section .export-actions{ justify-content:flex-start; }
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  const getCollectionAccent = (cid, name='', idx=0) => {
+    const label = `${cid || ''} ${name || ''}`.toLowerCase();
+    if (label.includes('2026')) return { accent:'#c99a2e', bg:'rgba(201,154,46,.14)', ink:'#6f4d0a' };
+    if (label.includes('2025')) return { accent:'#6f8fb8', bg:'rgba(111,143,184,.14)', ink:'#31506f' };
+    if (label.includes('2024')) return { accent:'#7aa384', bg:'rgba(122,163,132,.14)', ink:'#355f40' };
+    if (label.includes('starsze')) return { accent:'#8c7b66', bg:'rgba(140,123,102,.14)', ink:'#554638' };
+    const palette = [
+      { accent:'#b78a55', bg:'rgba(183,138,85,.14)', ink:'#704a22' },
+      { accent:'#7f8fa6', bg:'rgba(127,143,166,.14)', ink:'#3f5068' },
+      { accent:'#8f9f72', bg:'rgba(143,159,114,.14)', ink:'#4f5f34' },
+      { accent:'#a9828f', bg:'rgba(169,130,143,.14)', ink:'#65404d' }
+    ];
+    return palette[Math.abs(idx) % palette.length];
+  };
+
+  const collectionAccentStyle = (accent) => `--col-accent:${accent.accent};--col-accent-bg:${accent.bg};--col-accent-ink:${accent.ink};`;
+
   // ---------- Storage keys ----------
   const STORE_KEY = 'slow_motion_fabrics_v20';
   const CLIENT_ID_KEY = 'slow_fabric_tracker_client_id';
@@ -1591,6 +1721,8 @@ window.SEED_DATA = window.SEED_DATA || {
     "select-all-colors","clear-colors-selection","bulk-set-color-status","bulk-delete-colors",
     "bulk-set-fabric-status","bulk-delete-fabrics",
     "move-collection-up","move-collection-down","set-collection-first",
+    "add-collection","rename-collection","delete-collection",
+    "move-fabric-to-collection","move-selected-fabrics-to-collection",
     "add-fabric","import-json","reset-seed"
   ]);
   const setAdmin = (v, email="") => {
@@ -1949,12 +2081,18 @@ window.SEED_DATA = window.SEED_DATA || {
 
   const renderLeft = () => {
     const q = ($('#searchInput').value || '').trim().toLowerCase();
+    state.settings ||= {};
+    state.settings.collectionOrder = [
+      ...(state.settings.collectionOrder || []).filter(cid => state.collections?.[cid]),
+      ...Object.keys(state.collections || {}).filter(cid => !(state.settings.collectionOrder || []).includes(cid))
+    ];
     const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
 
-    const html = colOrder.map(cid => {
+    const html = colOrder.map((cid, idx) => {
       const c = state.collections[cid];
       if (!c) return '';
       const prog = getCollectionProgress(cid);
+      const accent = getCollectionAccent(cid, c.name, idx);
 
       // Filter fabrics based on search query
       const fabricRows = c.fabricOrder
@@ -1981,7 +2119,7 @@ window.SEED_DATA = window.SEED_DATA || {
 
       const open = state.ui?.openCollections?.includes(cid) ? 'open' : '';
       return `
-        <div class="collection ${open}" data-collection-id="${cid}">
+        <div class="collection ${open} collection-accented" data-collection-id="${cid}" style="${collectionAccentStyle(accent)}">
           <div class="collection-header" data-action="toggle-collection" data-collection-id="${cid}">
             <div class="collection-title">
               <div class="name">${escapeHtml(c.name)}</div>
@@ -2031,6 +2169,19 @@ window.SEED_DATA = window.SEED_DATA || {
       </div>
     ` : '';
 
+    const colOrderForMove = state.settings.collectionOrder || Object.keys(state.collections);
+    const moveCollectionOptions = colOrderForMove
+      .filter(cid => cid !== f.collectionId && state.collections[cid])
+      .map(cid => `<option value="${cid}">${escapeHtml(state.collections[cid]?.name || cid)}</option>`)
+      .join('');
+    const moveFabricBar = moveCollectionOptions ? `
+      <div class="move-fabric-box admin-only">
+        <strong>Przenieś tę tkaninę do innej zakładki:</strong>
+        <select id="moveFabricCollectionSelect" class="move-fabric-select">${moveCollectionOptions}</select>
+        <button class="btn" data-action="move-fabric-to-collection" data-fabric-id="${fid}">Przenieś</button>
+      </div>
+    ` : '';
+
     const colorRows = f.colorOrder.map(ck => {
       const st = f.colors[ck] || 'todo';
       const activeTodo = st==='todo' ? 'active' : '';
@@ -2070,6 +2221,8 @@ window.SEED_DATA = window.SEED_DATA || {
         </div>
       </div>
 
+      ${moveFabricBar}
+
       <div class="input-row">
         <input id="addColorsInput" placeholder="Dodaj kolory: np. 1-10, 15, 22" />
         <button class="btn primary" id="addColorsBtn" data-action="add-colors">Dodaj</button>
@@ -2084,34 +2237,96 @@ window.SEED_DATA = window.SEED_DATA || {
   };
 
   const renderSettings = () => {
+    state.settings ||= {};
+    state.settings.collectionOrder ||= Object.keys(state.collections || {});
+    state.collections ||= {};
+    state.fabrics ||= {};
+
+    const colOrder = (state.settings.collectionOrder || Object.keys(state.collections))
+      .filter(cid => state.collections[cid]);
+    state.settings.collectionOrder = colOrder;
+
     // collection dropdown for new fabric
     const sel = $('#newFabricCollection');
-    const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
-    sel.innerHTML = colOrder.map(cid => `<option value="${cid}">${escapeHtml(state.collections[cid]?.name || cid)}</option>`).join('');
+    if (sel) {
+      sel.innerHTML = colOrder.length
+        ? colOrder.map(cid => `<option value="${cid}">${escapeHtml(state.collections[cid]?.name || cid)}</option>`).join('')
+        : `<option value="">Najpierw dodaj zakładkę</option>`;
+      sel.disabled = !colOrder.length;
+    }
 
-    // order list
+    // editable collection manager
     const list = $('#collectionOrderList');
-    list.innerHTML = colOrder.map((cid, idx) => {
-      const name = state.collections[cid]?.name || cid;
-      return `
-        <div class="kv" data-collection-id="${cid}">
-          <div class="left">
-            <strong>${escapeHtml(name)}</strong>
-            <span>${idx===0 ? 'Wyświetlana jako pierwsza' : 'Kolejność: ' + (idx+1)}</span>
+    if (list) {
+      const collectionCards = colOrder.map((cid, idx) => {
+        const c = state.collections[cid];
+        const name = c?.name || cid;
+        const accent = getCollectionAccent(cid, name, idx);
+        const fabricCount = (c?.fabricOrder || []).filter(fid => !!state.fabrics[fid]).length;
+        const otherOptions = colOrder
+          .filter(otherCid => otherCid !== cid)
+          .map(otherCid => `<option value="${otherCid}">${escapeHtml(state.collections[otherCid]?.name || otherCid)}</option>`)
+          .join('');
+        const moveSelectedDisabled = otherOptions ? '' : 'disabled';
+        const deleteHint = fabricCount
+          ? `Ma ${fabricCount} tkanin — przed usunięciem wybierz, gdzie je przenieść.`
+          : 'Pusta zakładka — można usunąć bez przenoszenia.';
+
+        return `
+          <div class="kv collection-order-item collection-editable" data-collection-id="${cid}" style="${collectionAccentStyle(accent)}">
+            <div class="collection-edit-main">
+              <div class="left">
+                <strong>${escapeHtml(name)}</strong>
+                <span>${idx===0 ? 'Wyświetlana jako pierwsza' : 'Kolejność: ' + (idx+1)} • tkanin: ${fabricCount}</span>
+              </div>
+
+              <div class="collection-edit-row">
+                <input class="collection-name-input" value="${escapeHtml(name)}" placeholder="Nazwa zakładki" data-collection-name-input="${cid}" />
+                <button class="btn" data-action="rename-collection">Zapisz nazwę</button>
+              </div>
+
+              <div class="collection-edit-row">
+                <span class="small"><b>Przenieś zaznaczone tkaniny</b> z tej zakładki do:</span>
+                <select class="collection-move-select" ${moveSelectedDisabled}>${otherOptions || '<option>Brak innej zakładki</option>'}</select>
+                <button class="btn" data-action="move-selected-fabrics-to-collection" ${moveSelectedDisabled}>Przenieś zaznaczone</button>
+              </div>
+
+              <div class="collection-edit-row collection-danger-row">
+                <span class="small"><b>Usuwanie zakładki:</b> ${escapeHtml(deleteHint)}</span>
+                <select class="collection-delete-target" ${otherOptions ? '' : 'disabled'}>
+                  ${otherOptions ? `<option value="">Nie przenoś / tylko jeśli pusta</option>${otherOptions}` : '<option value="">Brak innej zakładki</option>'}
+                </select>
+                <button class="btn danger" data-action="delete-collection">Usuń zakładkę</button>
+              </div>
+            </div>
+            <div class="right">
+              <button class="btn" data-action="move-collection-up" ${idx===0?'disabled':''}>▲</button>
+              <button class="btn" data-action="move-collection-down" ${idx===colOrder.length-1?'disabled':''}>▼</button>
+              <button class="btn" data-action="set-collection-first" ${idx===0?'disabled':''}>⭐ Pierwsza</button>
+            </div>
           </div>
-          <div class="right">
-            <button class="btn" data-action="move-collection-up" ${idx===0?'disabled':''}>▲</button>
-            <button class="btn" data-action="move-collection-down" ${idx===colOrder.length-1?'disabled':''}>▼</button>
-            <button class="btn" data-action="set-collection-first" ${idx===0?'disabled':''}>⭐ Pierwsza</button>
+        `;
+      }).join('');
+
+      list.innerHTML = `
+        <div class="collection-manager-header">
+          <div class="field">
+            <label>Nowa zakładka / kolekcja</label>
+            <input id="newCollectionName" placeholder="np. Tkaniny 2027" />
           </div>
+          <button class="btn primary" data-action="add-collection">Dodaj zakładkę</button>
+        </div>
+        ${collectionCards || '<div class="small">Brak zakładek. Dodaj pierwszą zakładkę powyżej.</div>'}
+        <div class="small" style="margin-top:8px;">
+          Tip: żeby przenieść kilka tkanin naraz, włącz „Masowe”, zaznacz tkaniny po lewej, otwórz Ustawienia i użyj opcji „Przenieś zaznaczone”.
         </div>
       `;
-    }).join('');
+    }
 
     applyCloudCfgToUI();
     refreshCloudButtons();
+    renderExportControls();
   };
-
   let renderAll = () => {
     // init ui containers if missing
     state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
@@ -2196,6 +2411,7 @@ window.SEED_DATA = window.SEED_DATA || {
   const addFabric = (name, cid) => {
     const n = (name || '').trim();
     if (!n) return;
+    if (!cid || !state.collections?.[cid]) return toast('Najpierw wybierz albo dodaj zakładkę');
     pushUndo();
     const fid = 'f_' + slug(n) + '_' + uid().slice(0,8);
     state.fabrics[fid] = {
@@ -2365,6 +2581,116 @@ window.SEED_DATA = window.SEED_DATA || {
     scheduleCloudSave();
   };
 
+  const addCollection = (name) => {
+    const n = (name || '').trim();
+    if (!n) return toast('Wpisz nazwę zakładki');
+    pushUndo();
+    state.collections ||= {};
+    state.settings ||= {};
+    state.settings.collectionOrder ||= Object.keys(state.collections);
+    let base = 'c_' + slug(n);
+    let cid = base;
+    let i = 2;
+    while (state.collections[cid]) cid = `${base}_${i++}`;
+    state.collections[cid] = { id: cid, name: n, fabricOrder: [] };
+    state.settings.collectionOrder.push(cid);
+    state.ui ||= {};
+    state.ui.openCollections ||= [];
+    if (!state.ui.openCollections.includes(cid)) state.ui.openCollections.push(cid);
+    saveLocal();
+    renderAll();
+    scheduleCloudSave(true);
+    toast('Dodano zakładkę');
+  };
+
+  const renameCollection = (cid, name) => {
+    const c = state.collections?.[cid];
+    const n = (name || '').trim();
+    if (!c) return;
+    if (!n) return toast('Nazwa zakładki nie może być pusta');
+    if (c.name === n) return toast('Nazwa bez zmian');
+    pushUndo();
+    c.name = n;
+    saveLocal();
+    renderAll();
+    scheduleCloudSave(true);
+    toast('Zmieniono nazwę zakładki');
+  };
+
+  const moveFabricToCollection = (fid, targetCid) => {
+    const f = state.fabrics?.[fid];
+    const target = state.collections?.[targetCid];
+    if (!f || !target) return toast('Nie można przenieść tkaniny');
+    const sourceCid = f.collectionId;
+    if (sourceCid === targetCid) return toast('Tkanina już jest w tej zakładce');
+    pushUndo();
+    const source = state.collections[sourceCid];
+    if (source) source.fabricOrder = (source.fabricOrder || []).filter(x => x !== fid);
+    target.fabricOrder ||= [];
+    if (!target.fabricOrder.includes(fid)) target.fabricOrder.push(fid);
+    f.collectionId = targetCid;
+    state.ui ||= {};
+    state.ui.openCollections ||= [];
+    if (!state.ui.openCollections.includes(targetCid)) state.ui.openCollections.push(targetCid);
+    saveLocal();
+    renderAll();
+    scheduleCloudSave(true);
+    toast('Przeniesiono tkaninę');
+  };
+
+  const moveSelectedFabricsToCollection = (sourceCid, targetCid) => {
+    if (!sourceCid || !targetCid || !state.collections?.[targetCid]) return toast('Wybierz zakładkę docelową');
+    const selected = new Set(state.ui?.selectedFabricIds || []);
+    const sourceFids = state.collections?.[sourceCid]?.fabricOrder || [];
+    const toMove = sourceFids.filter(fid => selected.has(fid) && state.fabrics[fid]);
+    if (!toMove.length) return toast('Nie zaznaczono tkanin z tej zakładki');
+    pushUndo();
+    const source = state.collections[sourceCid];
+    const target = state.collections[targetCid];
+    source.fabricOrder = (source.fabricOrder || []).filter(fid => !toMove.includes(fid));
+    target.fabricOrder ||= [];
+    for (const fid of toMove) {
+      if (!target.fabricOrder.includes(fid)) target.fabricOrder.push(fid);
+      state.fabrics[fid].collectionId = targetCid;
+    }
+    state.ui.selectedFabricIds = (state.ui.selectedFabricIds || []).filter(fid => !toMove.includes(fid));
+    state.ui.openCollections ||= [];
+    if (!state.ui.openCollections.includes(targetCid)) state.ui.openCollections.push(targetCid);
+    saveLocal();
+    renderAll();
+    scheduleCloudSave(true);
+    toast(`Przeniesiono ${toMove.length} tkanin`);
+  };
+
+  const deleteCollection = (cid, targetCid='') => {
+    const c = state.collections?.[cid];
+    if (!c) return;
+    const fabricIds = (c.fabricOrder || []).filter(fid => !!state.fabrics[fid]);
+    if (fabricIds.length && (!targetCid || !state.collections[targetCid] || targetCid === cid)) {
+      return toast('Ta zakładka ma tkaniny — wybierz, gdzie je przenieść przed usunięciem');
+    }
+    const name = c.name || cid;
+    pushUndo();
+    if (fabricIds.length) {
+      const target = state.collections[targetCid];
+      target.fabricOrder ||= [];
+      for (const fid of fabricIds) {
+        if (!target.fabricOrder.includes(fid)) target.fabricOrder.push(fid);
+        state.fabrics[fid].collectionId = targetCid;
+      }
+    }
+    delete state.collections[cid];
+    state.settings.collectionOrder = (state.settings.collectionOrder || []).filter(x => x !== cid);
+    state.ui ||= {};
+    state.ui.openCollections = (state.ui.openCollections || []).filter(x => x !== cid);
+    state.ui.selectedFabricIds = (state.ui.selectedFabricIds || []).filter(fid => state.fabrics[fid]);
+    if (selectedFabricId && !state.fabrics[selectedFabricId]) selectedFabricId = null;
+    saveLocal();
+    renderAll();
+    scheduleCloudSave(true);
+    toast(`Usunięto zakładkę: ${name}`);
+  };
+
   // ---------- Settings modal ----------
   const openModal = () => $('#settingsModal').classList.add('open');
   const closeModal = () => $('#settingsModal').classList.remove('open');
@@ -2408,6 +2734,374 @@ window.SEED_DATA = window.SEED_DATA || {
     renderAll();
     scheduleCloudSave(true);
     toast('Zresetowano');
+  };
+
+
+  // ---------- Excel / PDF reports ----------
+  const STATUS_META = {
+    todo: { symbol: '✕', label: 'Do nagrania' },
+    fix: { symbol: '?', label: 'Do poprawy' },
+    done: { symbol: '✓', label: 'Nagrane' },
+    empty: { symbol: '', label: 'Brak kolorów' }
+  };
+
+  const todayStamp = () => new Date().toISOString().slice(0,10);
+  const fileSafe = (s) => String(s || '').trim().toLowerCase()
+    .replace(/[ąćęłńóśźż]/g, ch => ({ą:'a',ć:'c',ę:'e',ł:'l',ń:'n',ó:'o',ś:'s',ź:'z',ż:'z'}[ch] || ch))
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'raport';
+
+  const getSelectedExportCollectionId = () => {
+    const sel = document.getElementById('exportCollectionSelect');
+    return sel?.value || (state.settings.collectionOrder || Object.keys(state.collections))[0] || '';
+  };
+
+  const getFabricProgress = (fid) => {
+    const f = state.fabrics[fid];
+    if (!f) return { done:0, fix:0, todo:0, total:0, pct:0 };
+    let done=0, fix=0, todo=0;
+    for (const ck of f.colorOrder || []) {
+      const st = f.colors?.[ck] || 'todo';
+      if (st === 'done') done++;
+      else if (st === 'fix') fix++;
+      else todo++;
+    }
+    const total = done + fix + todo;
+    const pct = total ? Math.round(done * 100 / total) : 0;
+    return { done, fix, todo, total, pct };
+  };
+
+  const shouldIncludeStatus = (mode, st) => {
+    if (mode === 'todo') return st === 'todo';
+    if (mode === 'fix') return st === 'fix';
+    if (mode === 'worklist') return st === 'todo' || st === 'fix';
+    return true;
+  };
+
+  const getRowsForExport = (mode='all', collectionId='') => {
+    const rows = [];
+    const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
+    for (const cid of colOrder) {
+      const c = state.collections[cid];
+      if (!c) continue;
+      if (mode === 'collection' && collectionId && cid !== collectionId) continue;
+
+      for (const fid of c.fabricOrder || []) {
+        const f = state.fabrics[fid];
+        if (!f) continue;
+        if (mode === 'selected' && selectedFabricId && fid !== selectedFabricId) continue;
+        const fp = getFabricProgress(fid);
+
+        if (!f.colorOrder?.length) {
+          if (mode === 'all' || mode === 'collection' || mode === 'selected') {
+            rows.push({
+              'Kolekcja': c.name,
+              'Tkanina': f.name,
+              'Kolor': '',
+              'Status symbol': '',
+              'Status': STATUS_META.empty.label,
+              'Nagrane w tkaninie': fp.done,
+              'Do poprawy w tkaninie': fp.fix,
+              'Do nagrania w tkaninie': fp.todo,
+              'Wszystkie kolory w tkaninie': fp.total,
+              'Postęp tkaniny %': fp.pct
+            });
+          }
+          continue;
+        }
+
+        for (const ck of f.colorOrder) {
+          const st = f.colors?.[ck] || 'todo';
+          if (!shouldIncludeStatus(mode, st)) continue;
+          const meta = STATUS_META[st] || STATUS_META.todo;
+          rows.push({
+            'Kolekcja': c.name,
+            'Tkanina': f.name,
+            'Kolor': ck,
+            'Status symbol': meta.symbol,
+            'Status': meta.label,
+            'Nagrane w tkaninie': fp.done,
+            'Do poprawy w tkaninie': fp.fix,
+            'Do nagrania w tkaninie': fp.todo,
+            'Wszystkie kolory w tkaninie': fp.total,
+            'Postęp tkaniny %': fp.pct
+          });
+        }
+      }
+    }
+    return rows;
+  };
+
+  const getSummaryRows = () => {
+    const rows = [];
+    const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
+    let totalDone=0, totalFix=0, totalTodo=0, totalColors=0, totalFabrics=0;
+    for (const cid of colOrder) {
+      const c = state.collections[cid];
+      if (!c) continue;
+      let done=0, fix=0, todo=0, colors=0, fabrics=0;
+      for (const fid of c.fabricOrder || []) {
+        const f = state.fabrics[fid];
+        if (!f) continue;
+        fabrics++;
+        for (const ck of f.colorOrder || []) {
+          colors++;
+          const st = f.colors?.[ck] || 'todo';
+          if (st === 'done') done++;
+          else if (st === 'fix') fix++;
+          else todo++;
+        }
+      }
+      const pct = colors ? Math.round(done * 100 / colors) : 0;
+      totalDone += done; totalFix += fix; totalTodo += todo; totalColors += colors; totalFabrics += fabrics;
+      rows.push({
+        'Kolekcja': c.name,
+        'Tkaniny': fabrics,
+        'Wszystkie kolory': colors,
+        'Nagrane': done,
+        'Do poprawy': fix,
+        'Do nagrania': todo,
+        'Postęp %': pct
+      });
+    }
+    rows.push({
+      'Kolekcja': 'RAZEM',
+      'Tkaniny': totalFabrics,
+      'Wszystkie kolory': totalColors,
+      'Nagrane': totalDone,
+      'Do poprawy': totalFix,
+      'Do nagrania': totalTodo,
+      'Postęp %': totalColors ? Math.round(totalDone * 100 / totalColors) : 0
+    });
+    return rows;
+  };
+
+  const ensureExportSection = () => {
+    let section = document.getElementById('exportReportsSection');
+    if (section) return section;
+    const body = document.querySelector('#settingsModal .modal-body');
+    if (!body) return null;
+    const sep = document.createElement('hr');
+    sep.className = 'sep';
+    sep.id = 'exportReportsSep';
+    section = document.createElement('div');
+    section.id = 'exportReportsSection';
+    section.className = 'modal-section admin-only export-section';
+    section.innerHTML = `
+      <h4>Eksport Excel / PDF</h4>
+      <div class="small">Raporty korzystają z aktualnych danych widocznych w aplikacji. PDF otworzy okno wydruku — tam wybierz „Zapisz jako PDF”.</div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div class="field">
+          <label>Wybrana kolekcja do eksportu</label>
+          <select id="exportCollectionSelect"></select>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn" id="exportExcelCollectionBtn">Excel — wybrana kolekcja</button>
+        </div>
+      </div>
+      <div class="kv">
+        <div class="left">
+          <strong>Excel</strong>
+          <span>Pełny arkusz XLSX: statusy + podsumowanie kolekcji.</span>
+        </div>
+        <div class="right export-actions">
+          <button class="btn primary" id="exportExcelAllBtn">Excel — wszystko</button>
+          <button class="btn" id="exportExcelTodoBtn">Excel — do nagrania ✕</button>
+          <button class="btn" id="exportExcelFixBtn">Excel — do poprawy ?</button>
+        </div>
+      </div>
+      <div class="kv">
+        <div class="left">
+          <strong>PDF / wydruk</strong>
+          <span>Czysty raport do zapisania jako PDF lub wydrukowania.</span>
+        </div>
+        <div class="right export-actions">
+          <button class="btn primary" id="exportPdfAllBtn">PDF — wszystko</button>
+          <button class="btn" id="exportPdfWorklistBtn">PDF — lista pracy ✕/?</button>
+          <button class="btn" id="exportPdfSelectedBtn">PDF — wybrana tkanina</button>
+        </div>
+      </div>
+      <div class="small export-mini-note">Tip: najpierw kliknij tkaninę po lewej, jeśli chcesz eksportować tylko jedną tkaninę do PDF.</div>
+    `;
+    const backupSection = document.getElementById('resetSeedBtn')?.closest('.modal-section');
+    if (backupSection) {
+      body.insertBefore(sep, backupSection);
+      body.insertBefore(section, backupSection);
+    } else {
+      body.appendChild(sep);
+      body.appendChild(section);
+    }
+    return section;
+  };
+
+  const renderExportControls = () => {
+    const section = ensureExportSection();
+    if (!section || !state) return;
+    const sel = document.getElementById('exportCollectionSelect');
+    if (!sel) return;
+    const prev = sel.value;
+    const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
+    sel.innerHTML = colOrder.map(cid => `<option value="${escapeHtml(cid)}">${escapeHtml(state.collections[cid]?.name || cid)}</option>`).join('');
+    if (prev && colOrder.includes(prev)) sel.value = prev;
+  };
+
+  const ensureXlsx = async () => {
+    if (window.XLSX) return window.XLSX;
+    await new Promise((resolve, reject) => {
+      const existing = document.getElementById('xlsxExportScript');
+      if (existing) {
+        existing.addEventListener('load', resolve, { once:true });
+        existing.addEventListener('error', reject, { once:true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'xlsxExportScript';
+      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    if (!window.XLSX) throw new Error('XLSX not loaded');
+    return window.XLSX;
+  };
+
+  const rowsToCsv = (rows) => {
+    if (!rows.length) rows = [{ Komunikat: 'Brak danych dla wybranego eksportu' }];
+    const headers = [...new Set(rows.flatMap(r => Object.keys(r)))];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    return [headers.map(esc).join(';'), ...rows.map(r => headers.map(h => esc(r[h])).join(';'))].join('\n');
+  };
+
+  const downloadPlainText = (filename, text, type='text/plain;charset=utf-8') => {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportFilename = (mode, ext, collectionId='') => {
+    const cName = collectionId ? state.collections[collectionId]?.name : '';
+    const label = mode === 'collection' ? `kolekcja_${fileSafe(cName || collectionId)}` : fileSafe(mode);
+    return `slow_motion_fabrics_${label}_${todayStamp()}.${ext}`;
+  };
+
+  const exportExcel = async (mode='all') => {
+    if (!isAdmin) { toast('Tylko administrator'); return; }
+    const collectionId = mode === 'collection' ? getSelectedExportCollectionId() : '';
+    const rows = getRowsForExport(mode, collectionId);
+    const summary = getSummaryRows();
+    try {
+      toast('Przygotowuję Excel…');
+      const XLSX = await ensureXlsx();
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Komunikat: 'Brak danych dla wybranego eksportu' }]);
+      ws['!cols'] = [
+        { wch: 22 }, { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 16 },
+        { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'Statusy');
+      const sumWs = XLSX.utils.json_to_sheet(summary);
+      sumWs['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, sumWs, 'Podsumowanie');
+      if (mode === 'all') {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getRowsForExport('todo')), 'Do nagrania');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getRowsForExport('fix')), 'Do poprawy');
+      }
+      XLSX.writeFile(wb, exportFilename(mode, 'xlsx', collectionId));
+      toast('Wyeksportowano Excel');
+    } catch (e) {
+      console.warn('Excel export fallback:', e);
+      downloadPlainText(exportFilename(mode, 'csv', collectionId), '\ufeff' + rowsToCsv(rows), 'text/csv;charset=utf-8');
+      toast('Nie udało się XLSX — zapisano CSV');
+    }
+  };
+
+  const buildPdfReportHtml = (mode, rows, collectionId='') => {
+    const titleMap = {
+      all: 'Slow Motion Fabrics — pełny raport',
+      worklist: 'Slow Motion Fabrics — lista pracy do nagrania / poprawy',
+      selected: 'Slow Motion Fabrics — wybrana tkanina',
+      collection: 'Slow Motion Fabrics — wybrana kolekcja'
+    };
+    const title = titleMap[mode] || 'Slow Motion Fabrics — raport';
+    const summary = getSummaryRows();
+    const total = summary[summary.length - 1] || {};
+    const grouped = new Map();
+    for (const r of rows) {
+      const key = r.Kolekcja || 'Bez kolekcji';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(r);
+    }
+    const rowsHtml = [...grouped.entries()].map(([collectionName, items]) => `
+      <section>
+        <h2>${escapeHtml(collectionName)}</h2>
+        <table>
+          <thead><tr><th>Tkanina</th><th>Kolor</th><th>Status</th><th>Postęp tkaniny</th></tr></thead>
+          <tbody>
+            ${items.map(r => `
+              <tr>
+                <td>${escapeHtml(r.Tkanina)}</td>
+                <td>${escapeHtml(r.Kolor)}</td>
+                <td><span class="status ${fileSafe(r.Status)}">${escapeHtml(r['Status symbol'])} ${escapeHtml(r.Status)}</span></td>
+                <td>${escapeHtml(r['Nagrane w tkaninie'])}/${escapeHtml(r['Wszystkie kolory w tkaninie'])} — ${escapeHtml(r['Postęp tkaniny %'])}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </section>
+    `).join('');
+
+    return `<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:28px;color:#25211b;background:#fff;}
+    h1{font-size:24px;margin:0 0 8px;} h2{font-size:17px;margin:26px 0 8px;border-left:6px solid #c99a2e;padding-left:10px;}
+    .meta{color:#6b6257;font-size:12px;margin-bottom:16px;} .summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 22px;}
+    .box{border:1px solid #ddd3c3;border-radius:12px;padding:10px 12px;background:#faf8f4;min-width:120px;}
+    .box strong{display:block;font-size:18px;} .box span{font-size:11px;color:#6b6257;text-transform:uppercase;letter-spacing:.04em;}
+    table{width:100%;border-collapse:collapse;font-size:12px;} th,td{border-bottom:1px solid #e8dfd3;padding:7px 6px;text-align:left;vertical-align:top;}
+    th{background:#f6f1e8;font-size:11px;text-transform:uppercase;letter-spacing:.04em;} tr:nth-child(even) td{background:#fcfaf6;}
+    .status{display:inline-block;border-radius:999px;padding:3px 8px;border:1px solid #ddd3c3;background:#fff;white-space:nowrap;}
+    @page{size:A4;margin:12mm;} @media print{body{margin:0;} .no-print{display:none;} section{break-inside:avoid;}}
+  </style>
+</head>
+<body>
+  <button class="no-print" onclick="window.print()" style="position:fixed;right:20px;top:20px;padding:10px 14px;border-radius:999px;border:1px solid #d8cbbb;background:#fff;cursor:pointer;">Drukuj / zapisz PDF</button>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="meta">Wygenerowano: ${escapeHtml(new Date().toLocaleString('pl-PL'))}${collectionId ? ' • ' + escapeHtml(state.collections[collectionId]?.name || collectionId) : ''}</div>
+  <div class="summary">
+    <div class="box"><strong>${escapeHtml(total['Wszystkie kolory'] ?? 0)}</strong><span>Wszystkie kolory</span></div>
+    <div class="box"><strong>${escapeHtml(total.Nagrane ?? 0)}</strong><span>Nagrane</span></div>
+    <div class="box"><strong>${escapeHtml(total['Do poprawy'] ?? 0)}</strong><span>Do poprawy</span></div>
+    <div class="box"><strong>${escapeHtml(total['Do nagrania'] ?? 0)}</strong><span>Do nagrania</span></div>
+    <div class="box"><strong>${escapeHtml(total['Postęp %'] ?? 0)}%</strong><span>Postęp</span></div>
+  </div>
+  ${rows.length ? rowsHtml : '<p>Brak danych dla wybranego raportu.</p>'}
+  <script>setTimeout(() => window.print(), 450);<\/script>
+</body>
+</html>`;
+  };
+
+  const exportPdf = (mode='all') => {
+    if (!isAdmin) { toast('Tylko administrator'); return; }
+    const collectionId = mode === 'collection' ? getSelectedExportCollectionId() : '';
+    if (mode === 'selected' && !selectedFabricId) { toast('Najpierw wybierz tkaninę po lewej'); return; }
+    const rows = getRowsForExport(mode, collectionId);
+    const win = window.open('', '_blank');
+    if (!win) { toast('Przeglądarka zablokowała okno PDF'); return; }
+    win.document.open();
+    win.document.write(buildPdfReportHtml(mode, rows, collectionId));
+    win.document.close();
+    toast('Otworzono raport PDF / wydruk');
   };
 
   // ---------- Cloud actions ----------
@@ -2679,6 +3373,41 @@ window.SEED_DATA = window.SEED_DATA || {
         const cid = actionEl.closest('[data-collection-id]').getAttribute('data-collection-id');
         return setCollectionFirst(cid);
       }
+      if (action === 'add-collection') {
+        const input = document.getElementById('newCollectionName');
+        const name = input?.value || '';
+        if (input) input.value = '';
+        return addCollection(name);
+      }
+      if (action === 'rename-collection') {
+        const wrap = actionEl.closest('[data-collection-id]');
+        const cid = wrap?.getAttribute('data-collection-id');
+        const input = wrap?.querySelector('.collection-name-input');
+        return renameCollection(cid, input?.value || '');
+      }
+      if (action === 'move-fabric-to-collection') {
+        const fidToMove = actionEl.getAttribute('data-fabric-id') || selectedFabricId;
+        const targetCid = document.getElementById('moveFabricCollectionSelect')?.value || '';
+        return moveFabricToCollection(fidToMove, targetCid);
+      }
+      if (action === 'move-selected-fabrics-to-collection') {
+        const wrap = actionEl.closest('[data-collection-id]');
+        const cid = wrap?.getAttribute('data-collection-id');
+        const targetCid = wrap?.querySelector('.collection-move-select')?.value || '';
+        return moveSelectedFabricsToCollection(cid, targetCid);
+      }
+      if (action === 'delete-collection') {
+        const wrap = actionEl.closest('[data-collection-id]');
+        const cid = wrap?.getAttribute('data-collection-id');
+        const c = state.collections?.[cid];
+        const targetCid = wrap?.querySelector('.collection-delete-target')?.value || '';
+        const count = (c?.fabricOrder || []).filter(fid => !!state.fabrics[fid]).length;
+        const msg = count && targetCid
+          ? `Usunąć zakładkę „${c?.name || cid}” i przenieść ${count} tkanin do wybranej zakładki?`
+          : `Usunąć pustą zakładkę „${c?.name || cid}”?`;
+        if (!confirm(msg)) return;
+        return deleteCollection(cid, targetCid);
+      }
     }
 
     // Settings buttons
@@ -2691,6 +3420,14 @@ window.SEED_DATA = window.SEED_DATA || {
       closeModal();
       return;
     }
+
+    if (t.id === 'exportExcelAllBtn') return exportExcel('all');
+    if (t.id === 'exportExcelTodoBtn') return exportExcel('todo');
+    if (t.id === 'exportExcelFixBtn') return exportExcel('fix');
+    if (t.id === 'exportExcelCollectionBtn') return exportExcel('collection');
+    if (t.id === 'exportPdfAllBtn') return exportPdf('all');
+    if (t.id === 'exportPdfWorklistBtn') return exportPdf('worklist');
+    if (t.id === 'exportPdfSelectedBtn') return exportPdf('selected');
 
     if (t.id === 'exportJsonBtn') return exportJson();
     if (t.id === 'resetSeedBtn') { if (!isAdmin) { toast('Tylko administrator'); return; } return resetSeed(); }
@@ -2759,6 +3496,11 @@ window.SEED_DATA = window.SEED_DATA || {
         e.preventDefault();
         $('#addFabricBtn').click();
       }
+      if (active && active.id === 'newCollectionName') {
+        e.preventDefault();
+        const btn = document.querySelector('[data-action="add-collection"]');
+        if (btn) btn.click();
+      }
     }
   });
 
@@ -2814,6 +3556,7 @@ window.SEED_DATA = window.SEED_DATA || {
   }
 
   // ---------- Boot ----------
+  injectEnhancementStyles();
   state = loadState();
   state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
   cloud.lastLocalRev = state.rev || 0;
