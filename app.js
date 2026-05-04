@@ -1698,10 +1698,46 @@ window.SEED_DATA = window.SEED_DATA || {
 
   const collectionAccentStyle = (accent) => `--col-accent:${accent.accent};--col-accent-bg:${accent.bg};--col-accent-ink:${accent.ink};`;
 
+
+  // ---------- Community: zlecenia i uwagi dla osób bez logowania ----------
+  const injectCommunityStyles = () => {
+    if (document.getElementById('slowMotionCommunityStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'slowMotionCommunityStyles';
+    style.textContent = `
+      .community-summary{
+        display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 12px;
+      }
+      .community-summary .pill{ background:#fffaf0; }
+      .fabric-mini-badges{ display:flex; gap:5px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+      .mini-badge{ font-size:11px; padding:3px 7px; border-radius:999px; border:1px solid rgba(38,31,22,.14); background:rgba(255,255,255,.72); color:#6b6257; }
+      .mini-badge.order{ border-color:rgba(201,154,46,.35); background:rgba(201,154,46,.12); color:#6f4d0a; }
+      .mini-badge.note{ border-color:rgba(111,143,184,.35); background:rgba(111,143,184,.12); color:#31506f; }
+      .color-row.community-row{ align-items:stretch; flex-direction:column; gap:10px; }
+      .color-main-line{ display:flex; justify-content:space-between; gap:12px; align-items:center; width:100%; }
+      .community-tools{ width:100%; display:grid; grid-template-columns:1fr; gap:8px; padding-top:8px; border-top:1px dashed rgba(38,31,22,.14); }
+      .note-box{ display:grid; gap:7px; }
+      .note-box textarea{ width:100%; min-height:58px; resize:vertical; border-radius:12px; border:1px solid #ddd3c3; padding:9px 10px; font:inherit; background:#fff; }
+      .note-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .note-meta{ font-size:11px; color:#7c7165; }
+      .order-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .orders-panel{ margin:10px 0 12px; padding:12px; border:1px solid rgba(201,154,46,.25); background:rgba(201,154,46,.08); border-radius:16px; }
+      .orders-panel h4{ margin:0 0 8px; }
+      .order-card{ background:#fff; border:1px solid rgba(38,31,22,.12); border-radius:14px; padding:10px; margin-top:8px; }
+      .order-card .order-title{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-weight:800; }
+      .order-card .order-text{ margin-top:5px; color:#5f554b; white-space:pre-wrap; }
+      .viewer-info-box{ padding:10px 12px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.58); margin:10px 0; color:#5f554b; }
+      body[data-admin="0"] .admin-only-inline{ display:none !important; }
+      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .status{ width:100%; } }
+    `;
+    document.head.appendChild(style);
+  };
+
   // ---------- Storage keys ----------
   const STORE_KEY = 'slow_motion_fabrics_v20';
   const CLIENT_ID_KEY = 'slow_fabric_tracker_client_id';
   const CLOUD_CFG_KEY = 'slow_fabric_tracker_cloud_cfg_v1';
+  const COMMUNITY_STORE_KEY = 'slow_motion_fabrics_community_v1';
 
   // ---------- Admin (read-only for others) ----------
   const ADMIN_EMAIL = "admin@slowtkaniny.local";
@@ -1768,11 +1804,186 @@ window.SEED_DATA = window.SEED_DATA || {
     db: null,
     user: null,
     unsub: null,
+    notesUnsub: null,
+    ordersUnsub: null,
     ready: false,
     saving: false,
     lastRemoteRev: 0,
     lastLocalRev: 0,
     saveTimer: null
+  };
+
+  let viewerNotes = {};   // key: fabricId::color => {text, updatedAt, clientId}
+  let viewerOrders = [];  // aktywne zlecenia z Firestore
+
+  const colorNoteKey = (fid, ck) => `${fid}::${String(ck || '').trim()}`;
+  const colorNoteDocId = (fid, ck) => (`${fid}__${String(ck || '').trim()}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 220);
+  const normalizeStatus = (st) => st === 'done' ? 'done' : 'todo';
+  const normalizeStateStatuses = (obj) => {
+    try {
+      for (const f of Object.values(obj?.fabrics || {})) {
+        for (const ck of Object.keys(f.colors || {})) f.colors[ck] = normalizeStatus(f.colors[ck]);
+      }
+    } catch {}
+    return obj;
+  };
+  const loadLocalCommunity = () => {
+    try {
+      const raw = localStorage.getItem(COMMUNITY_STORE_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      viewerNotes = obj?.notes || {};
+      viewerOrders = obj?.orders || [];
+    } catch {}
+  };
+  const saveLocalCommunity = () => {
+    try { localStorage.setItem(COMMUNITY_STORE_KEY, JSON.stringify({ notes: viewerNotes, orders: viewerOrders })); } catch {}
+  };
+  const noteCountForFabric = (fid) => Object.keys(viewerNotes || {}).filter(k => k.startsWith(fid + '::') && (viewerNotes[k]?.text || '').trim()).length;
+  const orderCountForFabric = (fid) => (viewerOrders || []).filter(o => o.fabricId === fid && (o.status || 'open') === 'open').length;
+  const noteTextFor = (fid, ck) => viewerNotes[colorNoteKey(fid, ck)]?.text || '';
+  const orderCountForColor = (fid, ck) => (viewerOrders || []).filter(o => o.fabricId === fid && String(o.color) === String(ck) && (o.status || 'open') === 'open').length;
+
+  const communityNotesRef = () => cloudDocRef().collection('notes');
+  const communityOrdersRef = () => cloudDocRef().collection('orders');
+
+  const ensureCommunityReady = async () => {
+    if (!cloud.configured || !cloud.auth || !cloud.db) initCloudFromStoredCfg();
+    if (!cloud.auth || !cloud.db) { toast('Chmura nie jest gotowa — odśwież stronę'); return false; }
+    if (!cloud.auth.currentUser) {
+      try { await cloud.auth.signInAnonymously(); } catch (e) { console.warn(e); toast('Nie udało się połączyć anonimowo z Firebase'); return false; }
+    }
+    cloud.user = cloud.auth.currentUser || cloud.user;
+    if (!cloud.notesUnsub || !cloud.ordersUnsub) startCommunityListeners();
+    return !!cloud.user;
+  };
+
+  const startCommunityListeners = () => {
+    if (!cloud.user || !cloud.db) return;
+    try { if (cloud.notesUnsub) cloud.notesUnsub(); } catch {}
+    try { if (cloud.ordersUnsub) cloud.ordersUnsub(); } catch {}
+
+    cloud.notesUnsub = communityNotesRef().onSnapshot((snap) => {
+      const next = {};
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!d.fabricId || !d.color) return;
+        const key = colorNoteKey(d.fabricId, d.color);
+        next[key] = { id: doc.id, ...d };
+      });
+      viewerNotes = next;
+      saveLocalCommunity();
+      renderLeft();
+      renderRight();
+    }, (err) => { console.warn('Notes listener error:', err); });
+
+    cloud.ordersUnsub = communityOrdersRef().onSnapshot((snap) => {
+      const arr = [];
+      snap.forEach(doc => arr.push({ id: doc.id, ...(doc.data() || {}) }));
+      viewerOrders = arr
+        .filter(o => (o.status || 'open') !== 'deleted')
+        .sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      saveLocalCommunity();
+      renderLeft();
+      renderRight();
+    }, (err) => { console.warn('Orders listener error:', err); });
+  };
+
+  const saveColorNote = async (fid, ck, text) => {
+    text = String(text || '').trim();
+    if (!fid || !ck) return;
+    const f = state.fabrics?.[fid];
+    if (!f) return;
+    const key = colorNoteKey(fid, ck);
+    if (!text) return deleteColorNote(fid, ck);
+
+    viewerNotes[key] = { fabricId: fid, fabricName: f.name, collectionId: f.collectionId, color: ck, text, updatedAt: nowIso(), clientId };
+    saveLocalCommunity();
+    renderLeft(); renderRight();
+
+    if (!(await ensureCommunityReady())) return;
+    try {
+      await communityNotesRef().doc(colorNoteDocId(fid, ck)).set({
+        schemaVersion: 1,
+        fabricId: fid,
+        fabricName: f.name,
+        collectionId: f.collectionId,
+        collectionName: state.collections?.[f.collectionId]?.name || '',
+        color: String(ck),
+        text,
+        clientId,
+        updatedAt: nowIso(),
+        updatedByEmail: cloud.user?.email || '',
+        updatedByUid: cloud.user?.uid || ''
+      }, { merge: true });
+      toast('Zapisano uwagę');
+    } catch (e) {
+      console.warn(e);
+      toast('Chmura: błąd zapisu uwagi — sprawdź reguły Firestore');
+    }
+  };
+
+  const deleteColorNote = async (fid, ck) => {
+    const key = colorNoteKey(fid, ck);
+    delete viewerNotes[key];
+    saveLocalCommunity();
+    renderLeft(); renderRight();
+    if (!(await ensureCommunityReady())) return;
+    try {
+      await communityNotesRef().doc(colorNoteDocId(fid, ck)).delete();
+      toast('Usunięto uwagę');
+    } catch (e) {
+      console.warn(e);
+      toast('Chmura: błąd usuwania uwagi — sprawdź reguły Firestore');
+    }
+  };
+
+  const createOrder = async (fid, ck) => {
+    const f = state.fabrics?.[fid];
+    if (!f || !ck) return;
+    const author = (prompt('Kto zleca? Wpisz imię/nazwisko lub inicjały:', '') || '').trim();
+    if (!author) { toast('Zlecenie anulowane — brak podpisu'); return; }
+    const message = (prompt(`Uwagi do zlecenia ${f.name} ${ck} (opcjonalnie):`, '') || '').trim();
+    if (!(await ensureCommunityReady())) return;
+    try {
+      await communityOrdersRef().add({
+        schemaVersion: 1,
+        status: 'open',
+        fabricId: fid,
+        fabricName: f.name,
+        collectionId: f.collectionId,
+        collectionName: state.collections?.[f.collectionId]?.name || '',
+        color: String(ck),
+        author,
+        message,
+        clientId,
+        createdAt: nowIso(),
+        createdByEmail: cloud.user?.email || '',
+        createdByUid: cloud.user?.uid || ''
+      });
+      toast('Utworzono zlecenie');
+    } catch (e) {
+      console.warn(e);
+      toast('Chmura: błąd utworzenia zlecenia — sprawdź reguły Firestore');
+    }
+  };
+
+  const closeOrder = async (orderId) => {
+    if (!isAdmin) { toast('Tylko administrator'); return; }
+    if (!(await ensureCommunityReady())) return;
+    try {
+      await communityOrdersRef().doc(orderId).set({ status: 'closed', closedAt: nowIso(), closedBy: cloud.user?.email || ADMIN_EMAIL }, { merge: true });
+      toast('Zamknięto zlecenie');
+    } catch (e) { console.warn(e); toast('Błąd zamykania zlecenia'); }
+  };
+
+  const deleteOrder = async (orderId) => {
+    if (!isAdmin) { toast('Tylko administrator'); return; }
+    if (!(await ensureCommunityReady())) return;
+    try {
+      await communityOrdersRef().doc(orderId).delete();
+      toast('Usunięto zlecenie');
+    } catch (e) { console.warn(e); toast('Błąd usuwania zlecenia'); }
   };
 
   // ---------- Initialize state ----------
@@ -1783,10 +1994,10 @@ window.SEED_DATA = window.SEED_DATA || {
       try {
         const obj = JSON.parse(raw);
         // minimal validation
-        if (obj && obj.schemaVersion === 1 && obj.collections && obj.fabrics) return obj;
+        if (obj && obj.schemaVersion === 1 && obj.collections && obj.fabrics) return normalizeStateStatuses(obj);
       } catch {}
     }
-    return deepClone(seed);
+    return normalizeStateStatuses(deepClone(seed));
   };
 
   const saveLocal = () => {
@@ -1928,6 +2139,14 @@ window.SEED_DATA = window.SEED_DATA || {
       cloud.unsub();
       cloud.unsub = null;
     }
+    if (cloud.notesUnsub) {
+      cloud.notesUnsub();
+      cloud.notesUnsub = null;
+    }
+    if (cloud.ordersUnsub) {
+      cloud.ordersUnsub();
+      cloud.ordersUnsub = null;
+    }
   };
 
   const startCloudListener = () => {
@@ -1966,7 +2185,7 @@ window.SEED_DATA = window.SEED_DATA || {
 
       if (remoteData && remoteRev > cloud.lastLocalRev) {
         // Remote is newer -> adopt
-        state = remoteData;
+        state = normalizeStateStatuses(remoteData);
         saveLocal();
         renderAll();
         toast('Chmura: wczytano nowszą wersję');
@@ -1976,6 +2195,7 @@ window.SEED_DATA = window.SEED_DATA || {
       console.warn('Snapshot error:', err);
       toast('Chmura: błąd odczytu');
     });
+    startCommunityListeners();
   };
 
   const scheduleCloudSave = (immediate=false) => {
@@ -2042,7 +2262,7 @@ window.SEED_DATA = window.SEED_DATA || {
         const remote = snap.data();
         const remoteRev = remote?.rev || 0;
         if (remote?.data && remoteRev >= cloud.lastLocalRev) {
-          state = remote.data;
+          state = normalizeStateStatuses(remote.data);
           cloud.lastLocalRev = remoteRev;
           saveLocal();
           renderAll();
@@ -2072,7 +2292,7 @@ window.SEED_DATA = window.SEED_DATA || {
       if (!f) continue;
       for (const ck of f.colorOrder) {
         total++;
-        if (f.colors[ck] === 'done') done++;
+        if (normalizeStatus(f.colors[ck]) === 'done') done++;
       }
     }
     const pct = total ? Math.round(done * 100 / total) : 0;
@@ -2104,7 +2324,9 @@ window.SEED_DATA = window.SEED_DATA || {
           const checked = state.ui?.selectedFabricIds?.includes(f.id) ? 'checked' : '';
           const bulkClass = bulkMode ? 'bulk-on' : '';
           const colorsTotal = f.colorOrder.length;
-          const doneCount = f.colorOrder.filter(k => f.colors[k] === 'done').length;
+          const doneCount = f.colorOrder.filter(k => normalizeStatus(f.colors[k]) === 'done').length;
+          const nNotes = noteCountForFabric(f.id);
+          const nOrders = orderCountForFabric(f.id);
 
           return `
             <div class="fabric-row ${active} ${bulkClass}" data-fabric-id="${f.id}">
@@ -2112,7 +2334,7 @@ window.SEED_DATA = window.SEED_DATA || {
                 <div class="chk"><input type="checkbox" class="bulk-fabric" data-fabric-id="${f.id}" ${checked}></div>
                 <div class="fabric-name">${escapeHtml(f.name)}</div>
               </div>
-              <div class="fabric-badge">${doneCount}/${colorsTotal} ✓</div>
+              <div class="fabric-mini-badges">${nOrders ? `<span class="mini-badge order">zlecenia: ${nOrders}</span>` : ''}${nNotes ? `<span class="mini-badge note">uwagi: ${nNotes}</span>` : ''}<span class="fabric-badge">${doneCount}/${colorsTotal} ✓</span></div>
             </div>
           `;
         }).join('');
@@ -2152,7 +2374,9 @@ window.SEED_DATA = window.SEED_DATA || {
     const c = state.collections[f.collectionId];
     const selectedColors = new Set(state.ui?.selectedColorIds?.[fid] || []);
     const total = f.colorOrder.length;
-    const done = f.colorOrder.filter(k => f.colors[k] === 'done').length;
+    const done = f.colorOrder.filter(k => normalizeStatus(f.colors[k]) === 'done').length;
+    const activeOrders = (viewerOrders || []).filter(o => o.fabricId === fid && (o.status || 'open') === 'open');
+    const fabricNotesCount = noteCountForFabric(fid);
 
     const bulkBar = bulkMode ? `
       <div class="bulkbar">
@@ -2162,7 +2386,6 @@ window.SEED_DATA = window.SEED_DATA || {
           <button class="btn" data-action="clear-colors-selection">Wyczyść</button>
           <span class="pill">Ustaw:</span>
           <button class="btn" data-action="bulk-set-color-status" data-status="todo">✕</button>
-          <button class="btn" data-action="bulk-set-color-status" data-status="fix">?</button>
           <button class="btn" data-action="bulk-set-color-status" data-status="done">✓</button>
           <button class="btn danger" data-action="bulk-delete-colors">Usuń kolory</button>
         </div>
@@ -2184,21 +2407,37 @@ window.SEED_DATA = window.SEED_DATA || {
 
     const colorRows = f.colorOrder.map(ck => {
       const st = f.colors[ck] || 'todo';
-      const activeTodo = st==='todo' ? 'active' : '';
-      const activeFix = st==='fix' ? 'active' : '';
-      const activeDone = st==='done' ? 'active' : '';
+      const activeTodo = normalizeStatus(st)==='todo' ? 'active' : '';
+      const activeDone = normalizeStatus(st)==='done' ? 'active' : '';
+      const note = viewerNotes[colorNoteKey(fid, ck)] || null;
+      const noteText = note?.text || '';
+      const ordersForColor = orderCountForColor(fid, ck);
       const checked = selectedColors.has(ck) ? 'checked' : '';
       return `
-        <div class="color-row" data-color="${ck}">
-          <div class="color-left">
-            <div class="chk"><input type="checkbox" class="bulk-color" data-color="${ck}" ${checked}></div>
-            <div class="color-code">${escapeHtml(ck)}</div>
+        <div class="color-row community-row" data-color="${ck}">
+          <div class="color-main-line">
+            <div class="color-left">
+              <div class="chk"><input type="checkbox" class="bulk-color" data-color="${ck}" ${checked}></div>
+              <div class="color-code">${escapeHtml(ck)}</div>
+              ${ordersForColor ? `<span class="mini-badge order">zleceń: ${ordersForColor}</span>` : ''}
+              ${noteText ? `<span class="mini-badge note">uwaga</span>` : ''}
+            </div>
+            <div class="status">
+              <button class="sbtn todo ${activeTodo} admin-only-inline" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}">✕</button>
+              <button class="sbtn done ${activeDone} admin-only-inline" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}">✓</button>
+              <button class="btn" style="padding:7px 10px;border-radius:10px;" data-action="create-order" data-color="${ck}">Utwórz zlecenie</button>
+              ${bulkMode ? '' : `<button class="btn danger admin-only-inline" style="padding:7px 10px;border-radius:10px;" data-action="delete-color" data-color="${ck}">Usuń</button>`}
+            </div>
           </div>
-          <div class="status">
-            <button class="sbtn todo ${activeTodo}" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}">✕</button>
-            <button class="sbtn fix ${activeFix}" title="Do poprawy" data-action="set-color-status" data-status="fix" data-color="${ck}">?</button>
-            <button class="sbtn done ${activeDone}" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}">✓</button>
-            ${bulkMode ? '' : `<button class="btn danger" style="padding:7px 10px;border-radius:10px;" data-action="delete-color" data-color="${ck}">Usuń</button>`}
+          <div class="community-tools">
+            <div class="note-box">
+              <textarea class="color-note-input" data-color="${ck}" placeholder="Uwaga do ${escapeHtml(f.name)} ${escapeHtml(ck)}, np. Rafał, popraw proszę, bo jest trochę za niebieski — Anita K">${escapeHtml(noteText)}</textarea>
+              <div class="note-actions">
+                <button class="btn" data-action="save-note" data-color="${ck}">Zapisz uwagę</button>
+                <button class="btn danger" data-action="delete-note" data-color="${ck}" ${noteText ? '' : 'disabled'}>Usuń uwagę</button>
+                ${note?.updatedAt ? `<span class="note-meta">Ostatnio: ${escapeHtml(formatDateTime(note.updatedAt))}</span>` : '<span class="note-meta">Uwagi mogą dodawać też osoby bez logowania.</span>'}
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -2214,16 +2453,36 @@ window.SEED_DATA = window.SEED_DATA || {
           ${bulkMode ? `
             <span class="pill">Tkanina:</span>
             <button class="btn" data-action="bulk-set-fabric-status" data-status="todo">✕</button>
-            <button class="btn" data-action="bulk-set-fabric-status" data-status="fix">?</button>
             <button class="btn" data-action="bulk-set-fabric-status" data-status="done">✓</button>
             <button class="btn danger" data-action="delete-fabric">Usuń tkaninę</button>
           ` : `<button class="btn danger" data-action="delete-fabric">Usuń tkaninę</button>`}
         </div>
       </div>
 
+      <div class="community-summary">
+        <span class="pill">Aktywne zlecenia: ${activeOrders.length}</span>
+        <span class="pill">Uwagi przy kolorach: ${fabricNotesCount}</span>
+      </div>
+      ${activeOrders.length ? `
+        <div class="orders-panel">
+          <h4>Zlecenia dla tej tkaniny</h4>
+          ${activeOrders.map(o => `
+            <div class="order-card">
+              <div class="order-title"><span>${escapeHtml(f.name)} ${escapeHtml(o.color)}</span><span>${escapeHtml(o.author || 'bez podpisu')}</span></div>
+              ${o.message ? `<div class="order-text">${escapeHtml(o.message)}</div>` : ''}
+              <div class="note-actions">
+                <span class="note-meta">${escapeHtml(formatDateTime(o.createdAt))}</span>
+                <button class="btn admin-only-inline" data-action="close-order" data-order-id="${escapeHtml(o.id)}">Zamknij</button>
+                <button class="btn danger admin-only-inline" data-action="delete-order" data-order-id="${escapeHtml(o.id)}">Usuń</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<div class="viewer-info-box">Osoby bez logowania mogą teraz utworzyć zlecenie filmu i dopisać uwagę przy konkretnym kolorze.</div>`}
+
       ${moveFabricBar}
 
-      <div class="input-row">
+      <div class="input-row admin-only">
         <input id="addColorsInput" placeholder="Dodaj kolory: np. 1-10, 15, 22" />
         <button class="btn primary" id="addColorsBtn" data-action="add-colors">Dodaj</button>
       </div>
@@ -2346,7 +2605,7 @@ window.SEED_DATA = window.SEED_DATA || {
     const f = state.fabrics[fid];
     if (!f || !f.colors[ck]) return;
     pushUndo();
-    f.colors[ck] = status;
+    f.colors[ck] = normalizeStatus(status);
     saveLocal();
     renderLeft();
     renderRight();
@@ -2489,7 +2748,7 @@ window.SEED_DATA = window.SEED_DATA || {
     pushUndo();
     const f = state.fabrics[fid];
     for (const ck of selected) {
-      if (f.colors[ck]) f.colors[ck] = status;
+      if (f.colors[ck]) f.colors[ck] = normalizeStatus(status);
     }
     saveLocal();
     renderLeft();
@@ -2522,7 +2781,7 @@ window.SEED_DATA = window.SEED_DATA || {
       const f = state.fabrics[fid];
       if (!f) continue;
       for (const ck of f.colorOrder) {
-        if (f.colors[ck]) f.colors[ck] = status;
+        if (f.colors[ck]) f.colors[ck] = normalizeStatus(status);
       }
     }
     saveLocal();
@@ -2718,7 +2977,7 @@ window.SEED_DATA = window.SEED_DATA || {
     try { obj = JSON.parse(text); } catch { return toast('Błędny JSON'); }
     if (!obj || obj.schemaVersion !== 1) return toast('Nieprawidłowy plik');
     pushUndo();
-    state = obj;
+    state = normalizeStateStatuses(obj);
     saveLocal();
     renderAll();
     scheduleCloudSave(true);
@@ -2728,7 +2987,7 @@ window.SEED_DATA = window.SEED_DATA || {
   const resetSeed = () => {
     if (!confirm('Resetuje lokalne dane i ładuje dane startowe. Kontynuować?')) return;
     undoStack = [];
-    state = deepClone(seed);
+    state = normalizeStateStatuses(deepClone(seed));
     selectedFabricId = null;
     saveLocal();
     renderAll();
@@ -2740,12 +2999,12 @@ window.SEED_DATA = window.SEED_DATA || {
   // ---------- Excel / PDF reports ----------
   const STATUS_META = {
     todo: { symbol: '✕', label: 'Do nagrania' },
-    fix: { symbol: '?', label: 'Do poprawy' },
     done: { symbol: '✓', label: 'Nagrane' },
     empty: { symbol: '', label: 'Brak kolorów' }
   };
 
   const todayStamp = () => new Date().toISOString().slice(0,10);
+  const formatDateTime = (iso) => { try { return new Date(iso).toLocaleString('pl-PL'); } catch { return String(iso || ''); } };
   const fileSafe = (s) => String(s || '').trim().toLowerCase()
     .replace(/[ąćęłńóśźż]/g, ch => ({ą:'a',ć:'c',ę:'e',ł:'l',ń:'n',ó:'o',ś:'s',ź:'z',ż:'z'}[ch] || ch))
     .replace(/[^a-z0-9_-]+/g, '-')
@@ -2758,23 +3017,22 @@ window.SEED_DATA = window.SEED_DATA || {
 
   const getFabricProgress = (fid) => {
     const f = state.fabrics[fid];
-    if (!f) return { done:0, fix:0, todo:0, total:0, pct:0 };
-    let done=0, fix=0, todo=0;
+    if (!f) return { done:0, todo:0, total:0, pct:0, notes:0, orders:0 };
+    let done=0, todo=0;
     for (const ck of f.colorOrder || []) {
-      const st = f.colors?.[ck] || 'todo';
+      const st = normalizeStatus(f.colors?.[ck] || 'todo');
       if (st === 'done') done++;
-      else if (st === 'fix') fix++;
       else todo++;
     }
-    const total = done + fix + todo;
+    const total = done + todo;
     const pct = total ? Math.round(done * 100 / total) : 0;
-    return { done, fix, todo, total, pct };
+    return { done, todo, total, pct, notes: noteCountForFabric(fid), orders: orderCountForFabric(fid) };
   };
 
   const shouldIncludeStatus = (mode, st) => {
     if (mode === 'todo') return st === 'todo';
-    if (mode === 'fix') return st === 'fix';
-    if (mode === 'worklist') return st === 'todo' || st === 'fix';
+    if (mode === 'fix') return false;
+    if (mode === 'worklist') return normalizeStatus(st) === 'todo';
     return true;
   };
 
@@ -2801,7 +3059,8 @@ window.SEED_DATA = window.SEED_DATA || {
               'Status symbol': '',
               'Status': STATUS_META.empty.label,
               'Nagrane w tkaninie': fp.done,
-              'Do poprawy w tkaninie': fp.fix,
+              'Uwagi przy tkaninie': fp.notes,
+              'Aktywne zlecenia przy tkaninie': fp.orders,
               'Do nagrania w tkaninie': fp.todo,
               'Wszystkie kolory w tkaninie': fp.total,
               'Postęp tkaniny %': fp.pct
@@ -2811,7 +3070,7 @@ window.SEED_DATA = window.SEED_DATA || {
         }
 
         for (const ck of f.colorOrder) {
-          const st = f.colors?.[ck] || 'todo';
+          const st = normalizeStatus(f.colors?.[ck] || 'todo');
           if (!shouldIncludeStatus(mode, st)) continue;
           const meta = STATUS_META[st] || STATUS_META.todo;
           rows.push({
@@ -2821,7 +3080,8 @@ window.SEED_DATA = window.SEED_DATA || {
             'Status symbol': meta.symbol,
             'Status': meta.label,
             'Nagrane w tkaninie': fp.done,
-            'Do poprawy w tkaninie': fp.fix,
+            'Uwagi przy tkaninie': fp.notes,
+            'Aktywne zlecenia przy tkaninie': fp.orders,
             'Do nagrania w tkaninie': fp.todo,
             'Wszystkie kolory w tkaninie': fp.total,
             'Postęp tkaniny %': fp.pct
@@ -2835,32 +3095,34 @@ window.SEED_DATA = window.SEED_DATA || {
   const getSummaryRows = () => {
     const rows = [];
     const colOrder = state.settings.collectionOrder || Object.keys(state.collections);
-    let totalDone=0, totalFix=0, totalTodo=0, totalColors=0, totalFabrics=0;
+    let totalDone=0, totalTodo=0, totalColors=0, totalFabrics=0, totalNotes=0, totalOrders=0;
     for (const cid of colOrder) {
       const c = state.collections[cid];
       if (!c) continue;
-      let done=0, fix=0, todo=0, colors=0, fabrics=0;
+      let done=0, todo=0, colors=0, fabrics=0, notes=0, orders=0;
       for (const fid of c.fabricOrder || []) {
         const f = state.fabrics[fid];
         if (!f) continue;
         fabrics++;
+        notes += noteCountForFabric(fid);
+        orders += orderCountForFabric(fid);
         for (const ck of f.colorOrder || []) {
           colors++;
-          const st = f.colors?.[ck] || 'todo';
+          const st = normalizeStatus(f.colors?.[ck] || 'todo');
           if (st === 'done') done++;
-          else if (st === 'fix') fix++;
           else todo++;
         }
       }
       const pct = colors ? Math.round(done * 100 / colors) : 0;
-      totalDone += done; totalFix += fix; totalTodo += todo; totalColors += colors; totalFabrics += fabrics;
+      totalDone += done; totalTodo += todo; totalColors += colors; totalFabrics += fabrics; totalNotes += notes; totalOrders += orders;
       rows.push({
         'Kolekcja': c.name,
         'Tkaniny': fabrics,
         'Wszystkie kolory': colors,
         'Nagrane': done,
-        'Do poprawy': fix,
         'Do nagrania': todo,
+        'Uwagi': notes,
+        'Aktywne zlecenia': orders,
         'Postęp %': pct
       });
     }
@@ -2869,8 +3131,9 @@ window.SEED_DATA = window.SEED_DATA || {
       'Tkaniny': totalFabrics,
       'Wszystkie kolory': totalColors,
       'Nagrane': totalDone,
-      'Do poprawy': totalFix,
       'Do nagrania': totalTodo,
+      'Uwagi': totalNotes,
+      'Aktywne zlecenia': totalOrders,
       'Postęp %': totalColors ? Math.round(totalDone * 100 / totalColors) : 0
     });
     return rows;
@@ -2908,7 +3171,6 @@ window.SEED_DATA = window.SEED_DATA || {
         <div class="right export-actions">
           <button class="btn primary" id="exportExcelAllBtn">Excel — wszystko</button>
           <button class="btn" id="exportExcelTodoBtn">Excel — do nagrania ✕</button>
-          <button class="btn" id="exportExcelFixBtn">Excel — do poprawy ?</button>
         </div>
       </div>
       <div class="kv">
@@ -2918,7 +3180,7 @@ window.SEED_DATA = window.SEED_DATA || {
         </div>
         <div class="right export-actions">
           <button class="btn primary" id="exportPdfAllBtn">PDF — wszystko</button>
-          <button class="btn" id="exportPdfWorklistBtn">PDF — lista pracy ✕/?</button>
+          <button class="btn" id="exportPdfWorklistBtn">PDF — lista pracy ✕</button>
           <button class="btn" id="exportPdfSelectedBtn">PDF — wybrana tkanina</button>
         </div>
       </div>
@@ -3011,7 +3273,6 @@ window.SEED_DATA = window.SEED_DATA || {
       XLSX.utils.book_append_sheet(wb, sumWs, 'Podsumowanie');
       if (mode === 'all') {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getRowsForExport('todo')), 'Do nagrania');
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getRowsForExport('fix')), 'Do poprawy');
       }
       XLSX.writeFile(wb, exportFilename(mode, 'xlsx', collectionId));
       toast('Wyeksportowano Excel');
@@ -3025,7 +3286,7 @@ window.SEED_DATA = window.SEED_DATA || {
   const buildPdfReportHtml = (mode, rows, collectionId='') => {
     const titleMap = {
       all: 'Slow Motion Fabrics — pełny raport',
-      worklist: 'Slow Motion Fabrics — lista pracy do nagrania / poprawy',
+      worklist: 'Slow Motion Fabrics — lista pracy do nagrania',
       selected: 'Slow Motion Fabrics — wybrana tkanina',
       collection: 'Slow Motion Fabrics — wybrana kolekcja'
     };
@@ -3081,7 +3342,8 @@ window.SEED_DATA = window.SEED_DATA || {
   <div class="summary">
     <div class="box"><strong>${escapeHtml(total['Wszystkie kolory'] ?? 0)}</strong><span>Wszystkie kolory</span></div>
     <div class="box"><strong>${escapeHtml(total.Nagrane ?? 0)}</strong><span>Nagrane</span></div>
-    <div class="box"><strong>${escapeHtml(total['Do poprawy'] ?? 0)}</strong><span>Do poprawy</span></div>
+    <div class="box"><strong>${escapeHtml(total['Uwagi'] ?? 0)}</strong><span>Uwagi</span></div>
+    <div class="box"><strong>${escapeHtml(total['Aktywne zlecenia'] ?? 0)}</strong><span>Zlecenia</span></div>
     <div class="box"><strong>${escapeHtml(total['Do nagrania'] ?? 0)}</strong><span>Do nagrania</span></div>
     <div class="box"><strong>${escapeHtml(total['Postęp %'] ?? 0)}%</strong><span>Postęp</span></div>
   </div>
@@ -3321,8 +3583,37 @@ window.SEED_DATA = window.SEED_DATA || {
     const actionEl = t.closest('[data-action]');
     if (actionEl) {
       const action = actionEl.getAttribute('data-action');
-      if (ADMIN_ACTIONS.has(action) && !isAdmin) { toast('Tylko administrator może edytować'); return; }
       const fid = selectedFabricId;
+      if (action === 'save-note') {
+        const ck = actionEl.getAttribute('data-color');
+        const row = actionEl.closest('.color-row');
+        const txt = row?.querySelector('.color-note-input')?.value || '';
+        saveColorNote(fid, ck, txt);
+        return;
+      }
+      if (action === 'delete-note') {
+        const ck = actionEl.getAttribute('data-color');
+        if (!confirm('Usunąć uwagę?')) return;
+        deleteColorNote(fid, ck);
+        return;
+      }
+      if (action === 'create-order') {
+        const ck = actionEl.getAttribute('data-color');
+        createOrder(fid, ck);
+        return;
+      }
+      if (action === 'close-order') {
+        const orderId = actionEl.getAttribute('data-order-id');
+        closeOrder(orderId);
+        return;
+      }
+      if (action === 'delete-order') {
+        const orderId = actionEl.getAttribute('data-order-id');
+        if (!confirm('Usunąć zlecenie?')) return;
+        deleteOrder(orderId);
+        return;
+      }
+      if (ADMIN_ACTIONS.has(action) && !isAdmin) { toast('Tylko administrator może edytować'); return; }
       if (action === 'set-color-status') {
         const ck = actionEl.getAttribute('data-color');
         const st = actionEl.getAttribute('data-status');
@@ -3423,7 +3714,6 @@ window.SEED_DATA = window.SEED_DATA || {
 
     if (t.id === 'exportExcelAllBtn') return exportExcel('all');
     if (t.id === 'exportExcelTodoBtn') return exportExcel('todo');
-    if (t.id === 'exportExcelFixBtn') return exportExcel('fix');
     if (t.id === 'exportExcelCollectionBtn') return exportExcel('collection');
     if (t.id === 'exportPdfAllBtn') return exportPdf('all');
     if (t.id === 'exportPdfWorklistBtn') return exportPdf('worklist');
@@ -3527,7 +3817,6 @@ window.SEED_DATA = window.SEED_DATA || {
         <span class="pill">Zaznaczone tkaniny: <span id="selFabricCount">0</span></span>
         <span class="pill">Ustaw:</span>
         <button class="btn" data-action="bulk-set-fabric-status" data-status="todo">✕</button>
-        <button class="btn" data-action="bulk-set-fabric-status" data-status="fix">?</button>
         <button class="btn" data-action="bulk-set-fabric-status" data-status="done">✓</button>
         <button class="btn danger" data-action="bulk-delete-fabrics">Usuń tkaniny</button>
       `;
@@ -3557,6 +3846,8 @@ window.SEED_DATA = window.SEED_DATA || {
 
   // ---------- Boot ----------
   injectEnhancementStyles();
+  injectCommunityStyles();
+  loadLocalCommunity();
   state = loadState();
   state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
   cloud.lastLocalRev = state.rev || 0;
