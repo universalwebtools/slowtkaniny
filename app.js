@@ -1699,6 +1699,50 @@ window.SEED_DATA = window.SEED_DATA || {
   const collectionAccentStyle = (accent) => `--col-accent:${accent.accent};--col-accent-bg:${accent.bg};--col-accent-ink:${accent.ink};`;
 
 
+  // ---------- UX: przyklejony panel szczegółów podczas przewijania ----------
+  const injectStickyDetailStyles = () => {
+    if (document.getElementById('slowMotionStickyDetailStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'slowMotionStickyDetailStyles';
+    style.textContent = `
+      /* Prawy panel "Szczegóły" jedzie razem z przewijaniem listy tkanin. */
+      #rightCard{
+        position:sticky !important;
+        top:92px !important;
+        align-self:flex-start !important;
+        max-height:calc(100vh - 112px) !important;
+        overflow:auto !important;
+        z-index:20;
+      }
+      #rightCard .card-head{
+        position:sticky;
+        top:0;
+        z-index:5;
+        background:rgba(255,253,248,.96);
+        backdrop-filter:blur(8px);
+      }
+      #detailPane{
+        scroll-margin-top:110px;
+      }
+      .color-row{
+        scroll-margin-top:130px;
+      }
+      @media (max-width: 980px){
+        #rightCard{
+          position:static !important;
+          top:auto !important;
+          max-height:none !important;
+          overflow:visible !important;
+        }
+        #rightCard .card-head{
+          position:static;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+
   // ---------- Community: zlecenia i uwagi dla osób bez logowania ----------
   const injectCommunityStyles = () => {
     if (document.getElementById('slowMotionCommunityStyles')) return;
@@ -4100,6 +4144,7 @@ window.SEED_DATA = window.SEED_DATA || {
   // ---------- Boot ----------
   injectEnhancementStyles();
   injectCommunityStyles();
+  injectStickyDetailStyles();
   loadLocalCommunity();
   state = loadState();
   state.ui ||= { openCollections: [], selectedFabricIds: [], selectedColorIds: {} };
