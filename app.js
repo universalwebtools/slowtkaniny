@@ -1,4 +1,5 @@
 document.documentElement.dataset.appReady = "1";
+document.documentElement.dataset.slowMotionVersion = "V10-viewer-status-alerts";
 window.SMF_BUILD = "V7_KOMPAKT_UWAGI_ZLECENIA_2026_05_04";
 console.log("Slow Motion Fabrics build:", window.SMF_BUILD);
 // Embedded seed (prevents missing seed.js on GitHub Pages deploys)
@@ -1781,6 +1782,8 @@ window.SEED_DATA = window.SEED_DATA || {
       .order-card .order-title{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-weight:800; }
       .order-card .order-text{ margin-top:5px; color:#5f554b; white-space:pre-wrap; }
       .viewer-info-box{ padding:10px 12px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.58); margin:10px 0; color:#5f554b; }
+      .compact-status .viewer-status[disabled]{ opacity:1 !important; cursor:default; filter:none; }
+      .compact-status .viewer-status[disabled].active{ box-shadow:0 0 0 4px rgba(76,112,255,.16); }
       body[data-admin="0"] .admin-only-inline{ display:none !important; }
 
       @keyframes adminSlowPulse{
@@ -1807,8 +1810,7 @@ window.SEED_DATA = window.SEED_DATA || {
         animation:adminBadgePulse 2.8s ease-in-out infinite;
         font-weight:800;
       }
-      .admin-alerts-panel{ display:none; }
-      body[data-admin="1"] .admin-alerts-panel{
+      .admin-alerts-panel{
         display:block;
         position:fixed;
         left:20px;
@@ -1841,8 +1843,8 @@ window.SEED_DATA = window.SEED_DATA || {
       .admin-alert-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
       .admin-alert-actions .btn{ padding:6px 9px; border-radius:10px; font-size:12px; }
       .admin-alert-empty{ color:#7b6f63; font-size:13px; padding:10px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.55); }
-      @media (max-width: 1380px){ body[data-admin="1"] .admin-alerts-panel{ position:static; width:auto; max-height:none; margin:10px auto 12px; max-width:900px; } }
-      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } body[data-admin="1"] .admin-alerts-panel{ margin:8px 10px; } }
+      @media (max-width: 1380px){ .admin-alerts-panel{ position:static; width:auto; max-height:none; margin:10px auto 12px; max-width:900px; } }
+      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } .admin-alerts-panel{ margin:8px 10px; } }
     `;
     document.head.appendChild(style);
   };
@@ -2586,6 +2588,7 @@ window.SEED_DATA = window.SEED_DATA || {
       const noteBtnLabel = noteText ? 'Uwagi ✓' : 'Uwagi';
       const orderBtnLabel = ordersForColor ? `Utwórz zlecenie (${ordersForColor})` : 'Utwórz zlecenie';
       const alertClass = (noteText || ordersForColor) ? 'has-admin-alert' : '';
+      const statusReadonly = isAdmin ? '' : 'disabled aria-disabled="true"';
       return `
         <div class="color-row community-row ${alertClass}" data-color="${ck}">
           <div class="color-main-line">
@@ -2596,8 +2599,8 @@ window.SEED_DATA = window.SEED_DATA || {
               ${noteText ? `<span class="mini-badge note">uwaga</span>` : ''}
             </div>
             <div class="compact-status">
-              <button class="sbtn todo ${activeTodo} admin-only-inline" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}">✕</button>
-              <button class="sbtn done ${activeDone} admin-only-inline" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}">✓</button>
+              <button class="sbtn todo ${activeTodo} viewer-status" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}" ${statusReadonly}>✕</button>
+              <button class="sbtn done ${activeDone} viewer-status" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}" ${statusReadonly}>✓</button>
               <button class="btn ${noteText ? 'has-note' : ''}" data-action="open-note" data-color="${ck}" title="Uwagi / notatka">${noteBtnLabel}</button>
               <button class="btn ${ordersForColor ? 'has-order' : ''}" data-action="create-order" data-color="${ck}">${orderBtnLabel}</button>
             </div>
@@ -2661,10 +2664,6 @@ window.SEED_DATA = window.SEED_DATA || {
 
   function renderAdminAlerts(){
     let panel = document.getElementById('adminAlertsPanel');
-    if (!isAdmin) {
-      if (panel) panel.remove();
-      return;
-    }
     if (!panel) {
       panel = document.createElement('aside');
       panel.id = 'adminAlertsPanel';
@@ -2696,8 +2695,8 @@ window.SEED_DATA = window.SEED_DATA || {
         <div class="admin-alert-meta">${escapeHtml(o.author || 'bez podpisu')} • ${escapeHtml(formatDateTime(o.createdAt))}</div>
         <div class="admin-alert-actions">
           <button class="btn" data-action="focus-community-item" data-fabric-id="${escapeHtml(o.fabricId || '')}" data-color="${escapeHtml(o.color || '')}">Pokaż</button>
-          <button class="btn" data-action="close-order" data-order-id="${escapeHtml(o.id || '')}">Zamknij</button>
-          <button class="btn danger" data-action="delete-order" data-order-id="${escapeHtml(o.id || '')}">Usuń</button>
+          <button class="btn admin-only-inline" data-action="close-order" data-order-id="${escapeHtml(o.id || '')}">Zamknij</button>
+          <button class="btn danger admin-only-inline" data-action="delete-order" data-order-id="${escapeHtml(o.id || '')}">Usuń</button>
         </div>
       </div>
     `).join('') : `<div class="admin-alert-empty">Brak aktywnych zleceń.</div>`;
@@ -2719,7 +2718,7 @@ window.SEED_DATA = window.SEED_DATA || {
       <div class="admin-alerts-head">
         <div>
           <h3>🔔 Uwagi i zlecenia</h3>
-          <div class="sub">Widoczne tylko dla administratora. Kliknij pozycję, żeby przejść do tkaniny.</div>
+          <div class="sub">Widoczne dla wszystkich. Kliknij pozycję, żeby przejść do tkaniny.</div>
         </div>
         <div class="admin-alerts-counters">
           <span class="mini-badge order">zlecenia: ${activeOrders.length}</span>
