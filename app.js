@@ -1,5 +1,5 @@
 document.documentElement.dataset.appReady = "1";
-window.SMF_BUILD = "FINAL_CLOUD_ADMIN_V3_2026_04_30";
+window.SMF_BUILD = "V7_KOMPAKT_UWAGI_ZLECENIA_2026_05_04";
 console.log("Slow Motion Fabrics build:", window.SMF_BUILD);
 // Embedded seed (prevents missing seed.js on GitHub Pages deploys)
 window.SEED_DATA = window.SEED_DATA || {
@@ -1713,14 +1713,24 @@ window.SEED_DATA = window.SEED_DATA || {
       .mini-badge{ font-size:11px; padding:3px 7px; border-radius:999px; border:1px solid rgba(38,31,22,.14); background:rgba(255,255,255,.72); color:#6b6257; }
       .mini-badge.order{ border-color:rgba(201,154,46,.35); background:rgba(201,154,46,.12); color:#6f4d0a; }
       .mini-badge.note{ border-color:rgba(111,143,184,.35); background:rgba(111,143,184,.12); color:#31506f; }
-      .color-row.community-row{ align-items:stretch; flex-direction:column; gap:10px; }
+      .color-row.community-row{ align-items:center; flex-direction:row; gap:10px; }
       .color-main-line{ display:flex; justify-content:space-between; gap:12px; align-items:center; width:100%; }
-      .community-tools{ width:100%; display:grid; grid-template-columns:1fr; gap:8px; padding-top:8px; border-top:1px dashed rgba(38,31,22,.14); }
-      .note-box{ display:grid; gap:7px; }
-      .note-box textarea{ width:100%; min-height:58px; resize:vertical; border-radius:12px; border:1px solid #ddd3c3; padding:9px 10px; font:inherit; background:#fff; }
+      .community-tools{ display:none !important; }
+      .compact-status{ display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+      .compact-status .btn{ padding:7px 10px; border-radius:10px; }
+      .compact-status .has-note{ border-color:rgba(111,143,184,.45); background:rgba(111,143,184,.12); color:#31506f; }
+      .compact-status .has-order{ border-color:rgba(201,154,46,.45); background:rgba(201,154,46,.12); color:#6f4d0a; }
       .note-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
       .note-meta{ font-size:11px; color:#7c7165; }
       .order-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .note-modal-backdrop{ position:fixed; inset:0; z-index:9999; background:rgba(38,31,22,.42); display:none; align-items:center; justify-content:center; padding:18px; }
+      .note-modal-backdrop.open{ display:flex; }
+      .note-modal{ width:min(620px, 100%); background:#fffdf8; border:1px solid #e1d5c3; border-radius:20px; box-shadow:0 18px 70px rgba(38,31,22,.25); overflow:hidden; }
+      .note-modal-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid #eadfcc; }
+      .note-modal-head h3{ margin:0; font-size:18px; }
+      .note-modal-body{ padding:14px 16px; display:grid; gap:10px; }
+      .note-modal textarea{ width:100%; min-height:130px; resize:vertical; border-radius:14px; border:1px solid #ddd3c3; padding:11px 12px; font:inherit; background:#fff; box-sizing:border-box; }
+      .note-modal-footer{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px 16px; }
       .orders-panel{ margin:10px 0 12px; padding:12px; border:1px solid rgba(201,154,46,.25); background:rgba(201,154,46,.08); border-radius:16px; }
       .orders-panel h4{ margin:0 0 8px; }
       .order-card{ background:#fff; border:1px solid rgba(38,31,22,.12); border-radius:14px; padding:10px; margin-top:8px; }
@@ -1728,7 +1738,7 @@ window.SEED_DATA = window.SEED_DATA || {
       .order-card .order-text{ margin-top:5px; color:#5f554b; white-space:pre-wrap; }
       .viewer-info-box{ padding:10px 12px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.58); margin:10px 0; color:#5f554b; }
       body[data-admin="0"] .admin-only-inline{ display:none !important; }
-      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .status{ width:100%; } }
+      @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } }
     `;
     document.head.appendChild(style);
   };
@@ -1936,6 +1946,60 @@ window.SEED_DATA = window.SEED_DATA || {
       console.warn(e);
       toast('Chmura: błąd usuwania uwagi — sprawdź reguły Firestore');
     }
+  };
+
+
+  const openNoteDialog = (fid, ck) => {
+    const f = state.fabrics?.[fid];
+    if (!f || !ck) return;
+    const note = viewerNotes[colorNoteKey(fid, ck)] || null;
+    const currentText = note?.text || '';
+
+    let backdrop = document.getElementById('noteModalBackdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'noteModalBackdrop';
+      backdrop.className = 'note-modal-backdrop';
+      document.body.appendChild(backdrop);
+    }
+
+    backdrop.innerHTML = `
+      <div class="note-modal" role="dialog" aria-modal="true" aria-labelledby="noteModalTitle">
+        <div class="note-modal-head">
+          <h3 id="noteModalTitle">Uwagi / notatka — ${escapeHtml(f.name)} ${escapeHtml(ck)}</h3>
+          <button class="btn ghost" type="button" data-note-close>✕</button>
+        </div>
+        <div class="note-modal-body">
+          <textarea id="noteModalTextarea" placeholder="Wpisz uwagę lub notatkę do tego koloru…">${escapeHtml(currentText)}</textarea>
+          ${note?.updatedAt ? `<span class="note-meta">Ostatnia aktualizacja: ${escapeHtml(formatDateTime(note.updatedAt))}</span>` : `<span class="note-meta">Uwagi mogą dodawać także osoby bez logowania.</span>`}
+        </div>
+        <div class="note-modal-footer">
+          <div class="note-actions">
+            <button class="btn primary" type="button" data-note-save>Zapisz uwagę</button>
+            <button class="btn danger" type="button" data-note-delete ${currentText ? '' : 'disabled'}>Usuń uwagę</button>
+          </div>
+          <button class="btn" type="button" data-note-close>Zamknij</button>
+        </div>
+      </div>
+    `;
+
+    const close = () => backdrop.classList.remove('open');
+    backdrop.classList.add('open');
+    const textarea = backdrop.querySelector('#noteModalTextarea');
+    setTimeout(() => textarea?.focus(), 50);
+
+    backdrop.querySelectorAll('[data-note-close]').forEach(btn => btn.addEventListener('click', close));
+    backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); }, { once: true });
+    backdrop.querySelector('[data-note-save]')?.addEventListener('click', async () => {
+      await saveColorNote(fid, ck, textarea?.value || '');
+      close();
+    });
+    backdrop.querySelector('[data-note-delete]')?.addEventListener('click', async () => {
+      if (!currentText) return;
+      if (!confirm('Usunąć uwagę?')) return;
+      await deleteColorNote(fid, ck);
+      close();
+    });
   };
 
   const createOrder = async (fid, ck) => {
@@ -2413,6 +2477,8 @@ window.SEED_DATA = window.SEED_DATA || {
       const noteText = note?.text || '';
       const ordersForColor = orderCountForColor(fid, ck);
       const checked = selectedColors.has(ck) ? 'checked' : '';
+      const noteBtnLabel = noteText ? 'Uwagi ✓' : 'Uwagi';
+      const orderBtnLabel = ordersForColor ? `Utwórz zlecenie (${ordersForColor})` : 'Utwórz zlecenie';
       return `
         <div class="color-row community-row" data-color="${ck}">
           <div class="color-main-line">
@@ -2422,21 +2488,11 @@ window.SEED_DATA = window.SEED_DATA || {
               ${ordersForColor ? `<span class="mini-badge order">zleceń: ${ordersForColor}</span>` : ''}
               ${noteText ? `<span class="mini-badge note">uwaga</span>` : ''}
             </div>
-            <div class="status">
+            <div class="compact-status">
               <button class="sbtn todo ${activeTodo} admin-only-inline" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}">✕</button>
               <button class="sbtn done ${activeDone} admin-only-inline" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}">✓</button>
-              <button class="btn" style="padding:7px 10px;border-radius:10px;" data-action="create-order" data-color="${ck}">Utwórz zlecenie</button>
-              ${bulkMode ? '' : `<button class="btn danger admin-only-inline" style="padding:7px 10px;border-radius:10px;" data-action="delete-color" data-color="${ck}">Usuń</button>`}
-            </div>
-          </div>
-          <div class="community-tools">
-            <div class="note-box">
-              <textarea class="color-note-input" data-color="${ck}" placeholder="Uwaga do ${escapeHtml(f.name)} ${escapeHtml(ck)}, np. Rafał, popraw proszę, bo jest trochę za niebieski — Anita K">${escapeHtml(noteText)}</textarea>
-              <div class="note-actions">
-                <button class="btn" data-action="save-note" data-color="${ck}">Zapisz uwagę</button>
-                <button class="btn danger" data-action="delete-note" data-color="${ck}" ${noteText ? '' : 'disabled'}>Usuń uwagę</button>
-                ${note?.updatedAt ? `<span class="note-meta">Ostatnio: ${escapeHtml(formatDateTime(note.updatedAt))}</span>` : '<span class="note-meta">Uwagi mogą dodawać też osoby bez logowania.</span>'}
-              </div>
+              <button class="btn ${noteText ? 'has-note' : ''}" data-action="open-note" data-color="${ck}" title="Uwagi / notatka">${noteBtnLabel}</button>
+              <button class="btn ${ordersForColor ? 'has-order' : ''}" data-action="create-order" data-color="${ck}">${orderBtnLabel}</button>
             </div>
           </div>
         </div>
@@ -2478,7 +2534,7 @@ window.SEED_DATA = window.SEED_DATA || {
             </div>
           `).join('')}
         </div>
-      ` : `<div class="viewer-info-box">Osoby bez logowania mogą teraz utworzyć zlecenie filmu i dopisać uwagę przy konkretnym kolorze.</div>`}
+      ` : ''}
 
       ${moveFabricBar}
 
@@ -3584,6 +3640,11 @@ window.SEED_DATA = window.SEED_DATA || {
     if (actionEl) {
       const action = actionEl.getAttribute('data-action');
       const fid = selectedFabricId;
+      if (action === 'open-note') {
+        const ck = actionEl.getAttribute('data-color');
+        openNoteDialog(fid, ck);
+        return;
+      }
       if (action === 'save-note') {
         const ck = actionEl.getAttribute('data-color');
         const row = actionEl.closest('.color-row');
@@ -3827,9 +3888,24 @@ window.SEED_DATA = window.SEED_DATA || {
   };
 
   // Override renderAll to include top bulk counts
+
+  const cleanupRemovedFixStatus = () => {
+    document.querySelectorAll('.legend span').forEach(span => {
+      const txt = (span.textContent || '').toLowerCase();
+      if (txt.includes('do poprawy')) span.remove();
+    });
+    const subtitle = document.querySelector('.subtitle');
+    if (subtitle && subtitle.textContent.includes('?')) {
+      subtitle.textContent = 'Lista tkanin → statusy kolorów (✕ / ✓) + uwagi i zlecenia';
+    }
+    const detailLegend = document.getElementById('detailLegend');
+    if (detailLegend) detailLegend.innerHTML = '';
+  };
+
   const _renderAll = renderAll;
   renderAll = () => {
     _renderAll();
+    cleanupRemovedFixStatus();
     updateTopBulkControls();
     if (bulkMode) $('#selFabricCount').textContent = (state.ui?.selectedFabricIds?.length || 0);
   };
