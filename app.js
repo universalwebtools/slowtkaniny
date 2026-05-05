@@ -2129,6 +2129,12 @@ window.SEED_DATA = window.SEED_DATA || {
     });
   };
 
+  const findFabricByManualName = (name) => {
+    const wanted = String(name || '').trim().toLowerCase();
+    if (!wanted) return null;
+    return Object.values(state.fabrics || {}).find(f => String(f.name || '').trim().toLowerCase() === wanted) || null;
+  };
+
   const openNewColorOrderDialog = () => {
     let backdrop = document.getElementById('newColorOrderModal');
     if (!backdrop) {
@@ -2138,15 +2144,8 @@ window.SEED_DATA = window.SEED_DATA || {
       document.body.appendChild(backdrop);
     }
 
-    const colOrder = (state.settings?.collectionOrder || Object.keys(state.collections || {})).filter(cid => state.collections?.[cid]);
     const selectedFabric = state.fabrics?.[selectedFabricId] || null;
-    const defaultCollectionId = selectedFabric?.collectionId || colOrder[0] || '';
-
-    const collectionOptions = colOrder.map(cid => `<option value="${escapeHtml(cid)}" ${cid===defaultCollectionId?'selected':''}>${escapeHtml(state.collections[cid]?.name || cid)}</option>`).join('');
-    const fabricOptionsFor = (cid) => {
-      const fabricIds = (state.collections?.[cid]?.fabricOrder || []).filter(fid => state.fabrics?.[fid]);
-      return fabricIds.map(fid => `<option value="${escapeHtml(fid)}" ${fid===selectedFabricId?'selected':''}>${escapeHtml(state.fabrics[fid]?.name || fid)}</option>`).join('');
-    };
+    const selectedName = selectedFabric?.name || '';
 
     backdrop.innerHTML = `
       <div class="order-modal" role="dialog" aria-modal="true">
@@ -2155,25 +2154,20 @@ window.SEED_DATA = window.SEED_DATA || {
           <button class="btn ghost" type="button" data-order-close>✕</button>
         </div>
         <div class="order-modal-body">
-          <div class="small">Użyj tego wtedy, gdy w danej tkaninie brakuje filmu slow motion dla konkretnego koloru. Zlecenie pojawi się w bocznym panelu.</div>
+          <div class="small">Wpisz ręcznie nazwę tkaniny oraz numer brakującego koloru. Zlecenie pojawi się w bocznym panelu.</div>
           <div class="order-modal-grid">
-            <label>Zakładka / kolekcja
-              <select id="orderCollectionSelect">${collectionOptions}</select>
+            <label>Nazwa tkaniny
+              <input id="orderFabricNameInput" value="${escapeHtml(selectedName)}" placeholder="Wpisz nazwę tkaniny" autocomplete="off" />
             </label>
-            <label>Tkanina
-              <select id="orderFabricSelect">${fabricOptionsFor(defaultCollectionId)}</select>
-            </label>
-          </div>
-          <div class="order-modal-grid">
             <label>Numer koloru do zrobienia
-              <input id="orderColorInput" placeholder="np. 90" autocomplete="off" />
-            </label>
-            <label>Podpis osoby zlecającej
-              <input id="orderAuthorInput" placeholder="np. Anita K" autocomplete="name" />
+              <input id="orderColorInput" placeholder="Wpisz numer koloru" autocomplete="off" />
             </label>
           </div>
+          <label>Podpis osoby zlecającej
+            <input id="orderAuthorInput" placeholder="Podpis osoby zlecającej" autocomplete="name" />
+          </label>
           <label>Dodatkowa wiadomość / uwaga do zlecenia
-            <textarea id="orderMessageInput" placeholder="Opcjonalnie: np. potrzebne do prezentacji / klient prosi o ten kolor"></textarea>
+            <textarea id="orderMessageInput" placeholder="Dodatkowe informacje do zlecenia"></textarea>
           </label>
         </div>
         <div class="order-modal-footer">
@@ -2184,58 +2178,52 @@ window.SEED_DATA = window.SEED_DATA || {
     `;
 
     const close = () => backdrop.classList.remove('open');
-    const colSel = backdrop.querySelector('#orderCollectionSelect');
-    const fabSel = backdrop.querySelector('#orderFabricSelect');
+    const fabricNameInput = backdrop.querySelector('#orderFabricNameInput');
     const colorInput = backdrop.querySelector('#orderColorInput');
     const authorInput = backdrop.querySelector('#orderAuthorInput');
     const messageInput = backdrop.querySelector('#orderMessageInput');
 
-    const refreshFabricOptions = () => {
-      const cid = colSel?.value || '';
-      fabSel.innerHTML = fabricOptionsFor(cid) || `<option value="">Brak tkanin w tej zakładce</option>`;
-    };
-    colSel?.addEventListener('change', refreshFabricOptions);
     backdrop.querySelectorAll('[data-order-close]').forEach(btn => btn.addEventListener('click', close));
     backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); }, { once: true });
     backdrop.querySelector('[data-order-create]')?.addEventListener('click', async () => {
-      await createNewColorOrder({
-        collectionId: colSel?.value || '',
-        fabricId: fabSel?.value || '',
+      const ok = await createNewColorOrder({
+        fabricName: fabricNameInput?.value || '',
         color: colorInput?.value || '',
         author: authorInput?.value || '',
         message: messageInput?.value || ''
       });
-      close();
+      if (ok) close();
     });
 
     backdrop.classList.add('open');
-    setTimeout(() => colorInput?.focus(), 60);
+    setTimeout(() => (selectedName ? colorInput : fabricNameInput)?.focus(), 60);
   };
 
-  const createNewColorOrder = async ({ collectionId, fabricId, color, author, message }) => {
-    const f = state.fabrics?.[fabricId];
-    if (!f) { toast('Wybierz tkaninę'); return; }
-    const c = state.collections?.[collectionId || f.collectionId] || state.collections?.[f.collectionId];
+  const createNewColorOrder = async ({ fabricName, color, author, message }) => {
+    const typedFabricName = String(fabricName || '').trim();
+    const matchedFabric = findFabricByManualName(typedFabricName);
+    const matchedCollection = matchedFabric ? state.collections?.[matchedFabric.collectionId] : null;
     const ck = fmtColor(color || '').trim();
     const who = String(author || '').trim();
     const msg = String(message || '').trim();
-    if (!ck) { toast('Wpisz numer koloru'); return; }
-    if (!who) { toast('Wpisz podpis osoby zlecającej'); return; }
-    if ((f.colorOrder || []).map(String).includes(String(ck))) {
+    if (!typedFabricName) { toast('Wpisz nazwę tkaniny'); return false; }
+    if (!ck) { toast('Wpisz numer koloru'); return false; }
+    if (!who) { toast('Wpisz podpis osoby zlecającej'); return false; }
+    if (matchedFabric && (matchedFabric.colorOrder || []).map(String).includes(String(ck))) {
       toast('Ten kolor już istnieje przy tej tkaninie — do poprawek użyj przycisku „Uwagi”.');
-      return;
+      return false;
     }
-    if (!(await ensureCommunityReady())) return;
+    if (!(await ensureCommunityReady())) return false;
     try {
       await communityOrdersRef().add({
-        schemaVersion: 2,
+        schemaVersion: 3,
         orderType: 'new_color',
         requestType: 'new_color',
         status: 'open',
-        fabricId: f.id,
-        fabricName: f.name,
-        collectionId: c?.id || f.collectionId || '',
-        collectionName: c?.name || '',
+        fabricId: matchedFabric?.id || '',
+        fabricName: typedFabricName,
+        collectionId: matchedFabric?.collectionId || '',
+        collectionName: matchedCollection?.name || '',
         color: String(ck),
         author: who,
         message: msg,
@@ -2245,9 +2233,11 @@ window.SEED_DATA = window.SEED_DATA || {
         createdByUid: cloud.user?.uid || ''
       });
       toast('Utworzono zlecenie nowego koloru');
+      return true;
     } catch (e) {
       console.warn(e);
       toast('Chmura: błąd utworzenia zlecenia — sprawdź reguły Firestore');
+      return false;
     }
   };
 
