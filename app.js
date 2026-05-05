@@ -1843,7 +1843,21 @@ window.SEED_DATA = window.SEED_DATA || {
       .admin-alert-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
       .admin-alert-actions .btn{ padding:6px 9px; border-radius:10px; font-size:12px; }
       .admin-alert-empty{ color:#7b6f63; font-size:13px; padding:10px; border:1px dashed rgba(38,31,22,.16); border-radius:14px; background:rgba(255,255,255,.55); }
+      .request-order-btn{ width:100%; justify-content:center; font-weight:900; border-color:rgba(201,154,46,.55) !important; background:linear-gradient(135deg,rgba(255,246,220,.98),rgba(255,255,255,.9)); margin:8px 0 12px; }
+      .order-modal-backdrop{ position:fixed; inset:0; z-index:10000; background:rgba(38,31,22,.42); display:none; align-items:center; justify-content:center; padding:18px; }
+      .order-modal-backdrop.open{ display:flex; }
+      .order-modal{ width:min(680px,100%); background:#fffdf8; border:1px solid #e1d5c3; border-radius:20px; box-shadow:0 18px 70px rgba(38,31,22,.25); overflow:hidden; }
+      .order-modal-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid #eadfcc; }
+      .order-modal-head h3{ margin:0; font-size:18px; }
+      .order-modal-body{ padding:14px 16px; display:grid; gap:12px; }
+      .order-modal-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .order-modal label{ display:grid; gap:5px; font-size:12px; color:#6e6257; font-weight:800; }
+      .order-modal input,.order-modal select,.order-modal textarea{ width:100%; box-sizing:border-box; border-radius:14px; border:1px solid #ddd3c3; padding:10px 11px; font:inherit; background:#fff; }
+      .order-modal textarea{ min-height:90px; resize:vertical; }
+      .order-modal-footer{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px 16px; }
+      .order-kind{ display:inline-flex; align-items:center; gap:6px; }
       @media (max-width: 1380px){ .admin-alerts-panel{ position:static; width:auto; max-height:none; margin:10px auto 12px; max-width:900px; } }
+      @media (max-width: 720px){ .order-modal-grid{ grid-template-columns:1fr; } }
       @media (max-width: 720px){ .color-main-line{ align-items:flex-start; flex-direction:column; } .compact-status{ width:100%; justify-content:flex-start; } .admin-alerts-panel{ margin:8px 10px; } }
     `;
     document.head.appendChild(style);
@@ -1960,6 +1974,12 @@ window.SEED_DATA = window.SEED_DATA || {
   const orderCountForFabric = (fid) => (viewerOrders || []).filter(o => o.fabricId === fid && (o.status || 'open') === 'open').length;
   const noteTextFor = (fid, ck) => viewerNotes[colorNoteKey(fid, ck)]?.text || '';
   const orderCountForColor = (fid, ck) => (viewerOrders || []).filter(o => o.fabricId === fid && String(o.color) === String(ck) && (o.status || 'open') === 'open').length;
+  const isNewColorOrder = (o) => (o?.orderType || o?.requestType || '') === 'new_color';
+  const orderDisplayTitle = (o) => {
+    const fabric = state.fabrics?.[o?.fabricId]?.name || o?.fabricName || 'Tkanina';
+    const color = String(o?.color || '').trim();
+    return isNewColorOrder(o) ? `${fabric} — nowy kolor ${color}` : `${fabric} ${color}`;
+  };
 
   const communityNotesRef = () => cloudDocRef().collection('notes');
   const communityOrdersRef = () => cloudDocRef().collection('orders');
@@ -2109,30 +2129,122 @@ window.SEED_DATA = window.SEED_DATA || {
     });
   };
 
-  const createOrder = async (fid, ck) => {
-    const f = state.fabrics?.[fid];
-    if (!f || !ck) return;
-    const author = (prompt('Kto zleca? Wpisz imię/nazwisko lub inicjały:', '') || '').trim();
-    if (!author) { toast('Zlecenie anulowane — brak podpisu'); return; }
-    const message = (prompt(`Uwagi do zlecenia ${f.name} ${ck} (opcjonalnie):`, '') || '').trim();
+  const openNewColorOrderDialog = () => {
+    let backdrop = document.getElementById('newColorOrderModal');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'newColorOrderModal';
+      backdrop.className = 'order-modal-backdrop';
+      document.body.appendChild(backdrop);
+    }
+
+    const colOrder = (state.settings?.collectionOrder || Object.keys(state.collections || {})).filter(cid => state.collections?.[cid]);
+    const selectedFabric = state.fabrics?.[selectedFabricId] || null;
+    const defaultCollectionId = selectedFabric?.collectionId || colOrder[0] || '';
+
+    const collectionOptions = colOrder.map(cid => `<option value="${escapeHtml(cid)}" ${cid===defaultCollectionId?'selected':''}>${escapeHtml(state.collections[cid]?.name || cid)}</option>`).join('');
+    const fabricOptionsFor = (cid) => {
+      const fabricIds = (state.collections?.[cid]?.fabricOrder || []).filter(fid => state.fabrics?.[fid]);
+      return fabricIds.map(fid => `<option value="${escapeHtml(fid)}" ${fid===selectedFabricId?'selected':''}>${escapeHtml(state.fabrics[fid]?.name || fid)}</option>`).join('');
+    };
+
+    backdrop.innerHTML = `
+      <div class="order-modal" role="dialog" aria-modal="true">
+        <div class="order-modal-head">
+          <h3>🎥 Utwórz zlecenie nowego koloru</h3>
+          <button class="btn ghost" type="button" data-order-close>✕</button>
+        </div>
+        <div class="order-modal-body">
+          <div class="small">Użyj tego wtedy, gdy w danej tkaninie brakuje filmu slow motion dla konkretnego koloru. Zlecenie pojawi się w bocznym panelu.</div>
+          <div class="order-modal-grid">
+            <label>Zakładka / kolekcja
+              <select id="orderCollectionSelect">${collectionOptions}</select>
+            </label>
+            <label>Tkanina
+              <select id="orderFabricSelect">${fabricOptionsFor(defaultCollectionId)}</select>
+            </label>
+          </div>
+          <div class="order-modal-grid">
+            <label>Numer koloru do zrobienia
+              <input id="orderColorInput" placeholder="np. 90" autocomplete="off" />
+            </label>
+            <label>Podpis osoby zlecającej
+              <input id="orderAuthorInput" placeholder="np. Anita K" autocomplete="name" />
+            </label>
+          </div>
+          <label>Dodatkowa wiadomość / uwaga do zlecenia
+            <textarea id="orderMessageInput" placeholder="Opcjonalnie: np. potrzebne do prezentacji / klient prosi o ten kolor"></textarea>
+          </label>
+        </div>
+        <div class="order-modal-footer">
+          <button class="btn primary" type="button" data-order-create>Zapisz zlecenie</button>
+          <button class="btn" type="button" data-order-close>Zamknij</button>
+        </div>
+      </div>
+    `;
+
+    const close = () => backdrop.classList.remove('open');
+    const colSel = backdrop.querySelector('#orderCollectionSelect');
+    const fabSel = backdrop.querySelector('#orderFabricSelect');
+    const colorInput = backdrop.querySelector('#orderColorInput');
+    const authorInput = backdrop.querySelector('#orderAuthorInput');
+    const messageInput = backdrop.querySelector('#orderMessageInput');
+
+    const refreshFabricOptions = () => {
+      const cid = colSel?.value || '';
+      fabSel.innerHTML = fabricOptionsFor(cid) || `<option value="">Brak tkanin w tej zakładce</option>`;
+    };
+    colSel?.addEventListener('change', refreshFabricOptions);
+    backdrop.querySelectorAll('[data-order-close]').forEach(btn => btn.addEventListener('click', close));
+    backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(); }, { once: true });
+    backdrop.querySelector('[data-order-create]')?.addEventListener('click', async () => {
+      await createNewColorOrder({
+        collectionId: colSel?.value || '',
+        fabricId: fabSel?.value || '',
+        color: colorInput?.value || '',
+        author: authorInput?.value || '',
+        message: messageInput?.value || ''
+      });
+      close();
+    });
+
+    backdrop.classList.add('open');
+    setTimeout(() => colorInput?.focus(), 60);
+  };
+
+  const createNewColorOrder = async ({ collectionId, fabricId, color, author, message }) => {
+    const f = state.fabrics?.[fabricId];
+    if (!f) { toast('Wybierz tkaninę'); return; }
+    const c = state.collections?.[collectionId || f.collectionId] || state.collections?.[f.collectionId];
+    const ck = fmtColor(color || '').trim();
+    const who = String(author || '').trim();
+    const msg = String(message || '').trim();
+    if (!ck) { toast('Wpisz numer koloru'); return; }
+    if (!who) { toast('Wpisz podpis osoby zlecającej'); return; }
+    if ((f.colorOrder || []).map(String).includes(String(ck))) {
+      toast('Ten kolor już istnieje przy tej tkaninie — do poprawek użyj przycisku „Uwagi”.');
+      return;
+    }
     if (!(await ensureCommunityReady())) return;
     try {
       await communityOrdersRef().add({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        orderType: 'new_color',
+        requestType: 'new_color',
         status: 'open',
-        fabricId: fid,
+        fabricId: f.id,
         fabricName: f.name,
-        collectionId: f.collectionId,
-        collectionName: state.collections?.[f.collectionId]?.name || '',
+        collectionId: c?.id || f.collectionId || '',
+        collectionName: c?.name || '',
         color: String(ck),
-        author,
-        message,
+        author: who,
+        message: msg,
         clientId,
         createdAt: nowIso(),
         createdByEmail: cloud.user?.email || '',
         createdByUid: cloud.user?.uid || ''
       });
-      toast('Utworzono zlecenie');
+      toast('Utworzono zlecenie nowego koloru');
     } catch (e) {
       console.warn(e);
       toast('Chmura: błąd utworzenia zlecenia — sprawdź reguły Firestore');
@@ -2583,11 +2695,9 @@ window.SEED_DATA = window.SEED_DATA || {
       const activeDone = normalizeStatus(st)==='done' ? 'active' : '';
       const note = viewerNotes[colorNoteKey(fid, ck)] || null;
       const noteText = note?.text || '';
-      const ordersForColor = orderCountForColor(fid, ck);
       const checked = selectedColors.has(ck) ? 'checked' : '';
       const noteBtnLabel = noteText ? 'Uwagi ✓' : 'Uwagi';
-      const orderBtnLabel = ordersForColor ? `Utwórz zlecenie (${ordersForColor})` : 'Utwórz zlecenie';
-      const alertClass = (noteText || ordersForColor) ? 'has-admin-alert' : '';
+      const alertClass = noteText ? 'has-admin-alert' : '';
       const statusReadonly = isAdmin ? '' : 'disabled aria-disabled="true"';
       return `
         <div class="color-row community-row ${alertClass}" data-color="${ck}">
@@ -2595,14 +2705,12 @@ window.SEED_DATA = window.SEED_DATA || {
             <div class="color-left">
               <div class="chk"><input type="checkbox" class="bulk-color" data-color="${ck}" ${checked}></div>
               <div class="color-code">${escapeHtml(ck)}</div>
-              ${ordersForColor ? `<span class="mini-badge order">zleceń: ${ordersForColor}</span>` : ''}
               ${noteText ? `<span class="mini-badge note">uwaga</span>` : ''}
             </div>
             <div class="compact-status">
               <button class="sbtn todo ${activeTodo} viewer-status" title="Do nagrania" data-action="set-color-status" data-status="todo" data-color="${ck}" ${statusReadonly}>✕</button>
               <button class="sbtn done ${activeDone} viewer-status" title="Nagrane" data-action="set-color-status" data-status="done" data-color="${ck}" ${statusReadonly}>✓</button>
               <button class="btn ${noteText ? 'has-note' : ''}" data-action="open-note" data-color="${ck}" title="Uwagi / notatka">${noteBtnLabel}</button>
-              <button class="btn ${ordersForColor ? 'has-order' : ''}" data-action="create-order" data-color="${ck}">${orderBtnLabel}</button>
             </div>
           </div>
         </div>
@@ -2631,10 +2739,10 @@ window.SEED_DATA = window.SEED_DATA || {
       </div>
       ${activeOrders.length ? `
         <div class="orders-panel">
-          <h4>Zlecenia dla tej tkaniny</h4>
+          <h4>Zlecenia nowych kolorów dla tej tkaniny</h4>
           ${activeOrders.map(o => `
             <div class="order-card">
-              <div class="order-title"><span>${escapeHtml(f.name)} ${escapeHtml(o.color)}</span><span>${escapeHtml(o.author || 'bez podpisu')}</span></div>
+              <div class="order-title"><span>${escapeHtml(orderDisplayTitle(o))}</span><span>${escapeHtml(o.author || 'bez podpisu')}</span></div>
               ${o.message ? `<div class="order-text">${escapeHtml(o.message)}</div>` : ''}
               <div class="note-actions">
                 <span class="note-meta">${escapeHtml(formatDateTime(o.createdAt))}</span>
@@ -2690,7 +2798,7 @@ window.SEED_DATA = window.SEED_DATA || {
 
     const ordersHtml = activeOrders.length ? activeOrders.map(o => `
       <div class="admin-alert-card order" data-action="focus-community-item" data-fabric-id="${escapeHtml(o.fabricId || '')}" data-color="${escapeHtml(o.color || '')}">
-        <div class="admin-alert-title"><span>🎥 ${escapeHtml(fabricLabel(o.fabricId, o.fabricName))} ${escapeHtml(o.color || '')}</span><span class="mini-badge order">zlecenie</span></div>
+        <div class="admin-alert-title"><span>🎥 ${escapeHtml(orderDisplayTitle(o))}</span><span class="mini-badge order">${isNewColorOrder(o) ? 'nowy kolor' : 'zlecenie'}</span></div>
         ${o.message ? `<div class="admin-alert-text">${escapeHtml(shortText(o.message))}</div>` : `<div class="admin-alert-text">Bez dodatkowego opisu.</div>`}
         <div class="admin-alert-meta">${escapeHtml(o.author || 'bez podpisu')} • ${escapeHtml(formatDateTime(o.createdAt))}</div>
         <div class="admin-alert-actions">
@@ -2725,8 +2833,9 @@ window.SEED_DATA = window.SEED_DATA || {
           <span class="mini-badge note">uwagi: ${notes.length}</span>
         </div>
       </div>
+      <button class="btn request-order-btn" data-action="open-new-color-order">➕ Utwórz zlecenie nowego koloru</button>
       <div class="admin-alert-section">
-        <div class="admin-alert-section-title">🎥 Zlecenia slow motion</div>
+        <div class="admin-alert-section-title">🎥 Zlecenia nowych kolorów</div>
         ${ordersHtml}
       </div>
       <div class="admin-alert-section">
@@ -3878,9 +3987,8 @@ window.SEED_DATA = window.SEED_DATA || {
         deleteColorNote(fid, ck);
         return;
       }
-      if (action === 'create-order') {
-        const ck = actionEl.getAttribute('data-color');
-        createOrder(fid, ck);
+      if (action === 'open-new-color-order') {
+        openNewColorOrderDialog();
         return;
       }
       if (action === 'close-order') {
