@@ -100,8 +100,6 @@ document.documentElement.dataset.slowMotionLoader = "progress-status-v1";
       'opis statusów'
     );
 
-    source += `\n;(() => {\n  const refreshLegend = () => {\n    const legend = document.querySelector('#leftCard .legend');\n    if (legend) legend.innerHTML = '<span>do nagrania <span class="x">✕</span></span><span>w trakcie <span style="color:#d88700;font-weight:900">⏳</span></span><span>nagrane <span class="v">✓</span></span>';\n  };\n  refreshLegend();\n  const obs = new MutationObserver(refreshLegend);\n  const target = document.getElementById('leftCard');\n  if (target) obs.observe(target, { childList:true, subtree:true });\n})();\n`;
-
     // sourceURL pomaga w debugowaniu F12, mimo że kod jest uruchamiany dynamicznie.
     const runner = new Function(`${source}\n//# sourceURL=app.js`);
     runner();
